@@ -1,0 +1,14 @@
+{
+  "name": "@consyllus/md-notes-notebook",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Minimalist Markdown notebook sidecar for Antigravity",
+  "author": "FalsenJing (https://consyllus.com)",
+  "homepage": "https://consyllus.com",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Consyllus/md-notes.git"
+  },
+  "license": "MIT"
+}

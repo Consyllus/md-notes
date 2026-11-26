@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Markdown 笔记本</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/preload.js"></script>
+</head>
+<body>
+  <div id="app" class="app">
+    <!-- Top minimal header -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <button id="btn-drawer" class="icon-btn" title="笔记列表" aria-label="笔记列表">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+            <path d="M2.5 4h11M2.5 8h11M2.5 12h7.5"/>
+          </svg>
+        </button>
+        <div class="title-wrap">
+          <button id="btn-title" class="note-title-btn" title="点击重命名当前笔记">未命名笔记</button>
+          <input id="input-title" class="note-title-input hidden" type="text" maxlength="110" aria-label="重命名笔记" />
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <button id="btn-new" class="icon-btn" title="新建笔记 (Ctrl+N)" aria-label="新建笔记">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+            <path d="M8 3v10M3 8h10"/>
+          </svg>
+        </button>
+        <button id="btn-mode" class="pill-btn" title="切换实时预览 / Markdown 源码 (Ctrl+E)">源码</button>
+        <button id="btn-settings" class="icon-btn" title="设置与权限锁" aria-label="设置与权限锁">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="8" cy="8" r="2.2"/>
+            <path d="M13.3 8c0-.3 0-.6-.1-.9l1.3-1-1.2-2.1-1.5.6c-.4-.3-.9-.6-1.4-.8L10.1 2H7.7l-.3 1.8c-.5.2-1 .5-1.4.8l-1.5-.6-1.2 2.1 1.3 1c-.1.3-.1.6-.1.9s0 .6.1.9l-1.3 1 1.2 2.1 1.5-.6c.4.3.9.6 1.4.8l.3 1.8h2.4l.3-1.8c.5-.2 1-.5 1.4-.8l1.5.6 1.2-2.1-1.3-1c.1-.3.1-.6.1-.9z"/>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Compact formatting strip -->
+    <div id="fmt-bar" class="fmt-bar">
+      <button class="fmt-btn" data-fmt="h1" title="一级标题 (# )">H1</button>
+      <button class="fmt-btn" data-fmt="h2" title="二级标题 (## )">H2</button>
+      <button class="fmt-btn" data-fmt="bold" title="加粗 (Ctrl+B)"><strong>B</strong></button>
+      <button class="fmt-btn" data-fmt="italic" title="斜体"><em>I</em></button>
+      <button class="fmt-btn" data-fmt="code" title="行内代码">&lt;/&gt;</button>
+      <button class="fmt-btn" data-fmt="quote" title="引用 (> )">”</button>
+      <button class="fmt-btn" data-fmt="list" title="无序列表 (- ，Tab / Shift+Tab 调整层级)">• 列表</button>
+      <button class="fmt-btn" data-fmt="ol" title="有序列表 (1. ，Tab / Shift+Tab 调整层级)">1. 列表</button>
+      <button class="fmt-btn" data-fmt="todo" title="待办 (- [ ] ，Tab / Shift+Tab 调整层级)">☐ 待办</button>
+      <span class="fmt-spacer"></span>
+      <span id="save-status" class="save-status">就绪</span>
+    </div>
+
+    <!-- Main workspace -->
+    <main class="main">
+      <!-- Empty state -->
+      <div id="empty-state" class="empty-state hidden">
+        <div class="empty-icon">✎</div>
+        <div class="empty-title">还没有笔记</div>
+        <div id="empty-dir" class="empty-sub"></div>
+        <button id="btn-empty-create" class="primary-btn">新建第一篇笔记</button>
+      </div>
+
+      <!-- Live Preview Editor + Floating @@ Selection Overlay -->
+      <div id="live-editor" class="live-editor" role="region" aria-label="实时预览编辑区">
+        <div id="blocks-root" class="blocks-root"></div>
+
+        <!-- Floating @@ Selection Rectangle -->
+        <div id="selection-box" class="selection-box hidden" aria-label="@@ 上下文框选区域">
+          <div id="sel-drag-bar" class="sel-drag-bar" title="按住向上或向下拖拽调整框选范围，松手固定">
+            <span id="sel-badge" class="sel-badge">⇕ 向上拖拽框选，松手固定</span>
+          </div>
+          <button id="btn-sel-close" type="button" class="sel-close-btn" title="删除选框" aria-label="删除选框">✕</button>
+        </div>
+      </div>
+
+      <!-- Raw Markdown Source Editor -->
+      <textarea
+        id="source-editor"
+        class="editor hidden"
+        spellcheck="false"
+        placeholder="输入 Markdown 源码…"
+      ></textarea>
+    </main>
+
+    <!-- Minimal bottom status bar -->
+    <footer class="statusbar">
+      <div class="status-left">
+        <button id="btn-lock-badge" class="lock-badge" title="点击修改权限与 @@ 模式设置">🔓 读写</button>
+        <button id="btn-quote-badge" class="lock-badge" title="当前 @@ 框选模式（点击切换）">@@ 方式A</button>
+        <button id="btn-dir-indicator" class="dir-indicator" title="点击打开存储设置"></button>
+      </div>
+      <span id="word-count" class="word-count">0 字</span>
+    </footer>
+
+    <!-- Slide-over Notes List Drawer -->
+    <div id="drawer-backdrop" class="backdrop hidden"></div>
+    <aside id="drawer" class="drawer" aria-label="笔记列表">
+      <div class="drawer-head">
+        <span class="drawer-title">全部笔记</span>
+        <div class="drawer-head-actions">
+          <button id="btn-drawer-new" class="mini-primary-btn">+ 新建</button>
+          <button id="btn-drawer-close" class="icon-btn" aria-label="关闭">✕</button>
+        </div>
+      </div>
+      <div class="drawer-search-wrap">
+        <input id="input-search" class="text-input" type="search" placeholder="搜索笔记标题或内容…" />
+      </div>
+      <div id="new-note-box" class="new-note-box hidden">
+        <input id="input-new-name" class="text-input" type="text" placeholder="输入笔记名称（无需 .md）" maxlength="110" />
+        <div class="new-note-actions">
+          <button id="btn-new-confirm" class="mini-primary-btn">创建</button>
+          <button id="btn-new-cancel" class="mini-ghost-btn">取消</button>
+        </div>
+      </div>
+      <div id="note-list" class="note-list"></div>
+      <div class="drawer-foot">
+        <button id="btn-drawer-settings" class="drawer-dir-btn" title="更改存储目录"></button>
+      </div>
+    </aside>
+
+    <!-- Settings Modal -->
+    <div id="settings-backdrop" class="modal-backdrop hidden">
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-head">
+          <h2 id="settings-title">笔记本设置</h2>
+          <button id="btn-settings-close" class="icon-btn" aria-label="关闭设置">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="section-label">@@ 框选上下文模式（二选一互斥）</div>
+          <label class="radio-card" id="card-quote-a">
+            <input type="radio" name="quote-mode" value="modeA" checked />
+            <div class="radio-card-content">
+              <div class="radio-card-title">方式 A · 单轮文档索引引用（默认）</div>
+              <div class="radio-card-desc">给宿主发送文档位置与行号索引；初始为蓝色半透明框，在聊天窗口发送一轮消息后自动变灰失效。</div>
+            </div>
+          </label>
+          <label class="radio-card" id="card-quote-b">
+            <input type="radio" name="quote-mode" value="modeB" />
+            <div class="radio-card-content">
+              <div class="radio-card-title">方式 B · 常驻纯片段直投</div>
+              <div class="radio-card-desc">仅直接注入框选区域的纯文本（不含文档其余内容与路径），选框一直保持蓝色常驻生效，直至点右上角 ✕ 删除。</div>
+            </div>
+          </label>
+
+          <div class="section-label">Agent 访问权限锁（PreToolUse 引擎拦截）</div>
+          <div class="perm-card">
+            <label class="switch-row">
+              <div class="switch-info">
+                <div class="switch-title">允许 Agent 读取笔记</div>
+                <div class="switch-desc">关闭后，宿主引擎将拒绝聊天窗口读取或检索笔记目录（不影响方式 B 的框选直投）。</div>
+              </div>
+              <input id="chk-agent-read" type="checkbox" checked />
+            </label>
+            <div class="perm-divider"></div>
+            <label class="switch-row">
+              <div class="switch-info">
+                <div class="switch-title">允许 Agent 修改笔记</div>
+                <div class="switch-desc">关闭后禁止 Agent 修改笔记；开启时若光标在笔记本内且未保存也会自动临时锁写，光标离开即放行。</div>
+              </div>
+              <input id="chk-agent-write" type="checkbox" checked />
+            </label>
+          </div>
+
+          <div class="section-label">笔记存储位置</div>
+          <label class="radio-card" id="card-mode-workspace">
+            <input type="radio" name="storage-mode" value="workspace" checked />
+            <div class="radio-card-content">
+              <div class="radio-card-title">跟随当前工作区（默认）</div>
+              <div class="radio-card-desc">切换项目时自动保存到当前工作区目录中。</div>
+              <div class="sub-field">
+                <label class="field-label" for="input-ws-subdir">工作区子目录（留空则直接存在根目录）</label>
+                <div class="input-row">
+                  <input id="input-ws-subdir" class="text-input" type="text" placeholder="notes" />
+                  <button id="btn-preset-notes" type="button" class="mini-ghost-btn">notes</button>
+                  <button id="btn-preset-root" type="button" class="mini-ghost-btn">根目录</button>
+                </div>
+                <div id="ws-resolved-preview" class="path-hint"></div>
+              </div>
+            </div>
+          </label>
+
+          <label class="radio-card" id="card-mode-custom">
+            <input type="radio" name="storage-mode" value="custom" />
+            <div class="radio-card-content">
+              <div class="radio-card-title">自定义存储目录</div>
+              <div class="radio-card-desc">固定将所有笔记保存在你指定的本地文件夹（不存在时会自动创建）。</div>
+              <div class="sub-field">
+                <div class="input-row">
+                  <input id="input-custom-dir" class="text-input" type="text" placeholder="例如 C:\MyNotes 或 D:\Study\Notes" />
+                  <button id="btn-browse-toggle" type="button" class="mini-ghost-btn">浏览</button>
+                </div>
+              </div>
+              <div id="folder-browser" class="folder-browser hidden">
+                <div class="browser-bar">
+                  <button id="btn-browse-up" type="button" class="mini-ghost-btn">↑ 上级</button>
+                  <span id="browser-current" class="browser-current"></span>
+                  <button id="btn-browse-select" type="button" class="mini-primary-btn">选定此目录</button>
+                </div>
+                <div id="browser-list" class="browser-list"></div>
+              </div>
+            </div>
+          </label>
+
+          <div id="settings-error" class="form-error hidden"></div>
+        </div>
+        <div class="modal-foot">
+          <button id="btn-settings-cancel" type="button" class="mini-ghost-btn">取消</button>
+          <button id="btn-settings-save" type="button" class="primary-btn">保存设置</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Lightweight toast -->
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+# Runtime data & local state
+.data/
+sidecars/**/.data/
+
+# Dependencies & logs
+node_modules/
+*.log
+
+# OS metadata
+.DS_Store
+Thumbs.db

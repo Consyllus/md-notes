@@ -1,0 +1,23 @@
+{
+  "md-notes-agent-guard": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node hooks/notebook-guard.mjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreInvocation": [
+      {
+        "type": "command",
+        "command": "node hooks/notebook-guard.mjs",
+        "timeout": 5
+      }
+    ]
+  }
+}
