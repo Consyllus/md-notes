@@ -1,28 +1,16 @@
 # Markdown 笔记本 (`md-notes`)
 
-一个运行在 Google Antigravity 右侧辅助面板（Aux Pane）中的极简本地 Markdown 笔记本插件，由 **[Consyllus](https://consyllus.com)** 出品。
+一个运行在 Google Antigravity 右侧辅助面板（Aux Pane）中的极简本地 Markdown 笔记本插件。
 
 ## 快速安装
 
-### 1. Antigravity CLI 一键安装（推荐）
+### 1. Antigravity 一键安装（推荐）
 
 ```bash
 agy plugin install https://github.com/Consyllus/md-notes
 ```
 
-### 2. 手动克隆至全局插件目录（Antigravity App / IDE）
 
-**Windows (PowerShell)**
-```powershell
-git clone https://github.com/Consyllus/md-notes.git "$HOME\.gemini\config\plugins\md-notes"
-```
-
-**macOS / Linux**
-```bash
-git clone https://github.com/Consyllus/md-notes.git ~/.gemini/config/plugins/md-notes
-```
-
-> 若只需在单个项目内启用，也可克隆至项目根目录下的 `.agents/plugins/md-notes`。安装完成后，在对话中输入「打开笔记本」或调用 `/notebook` 即可唤起右侧笔记本面板。
 
 ---
 
@@ -50,6 +38,22 @@ git clone https://github.com/Consyllus/md-notes.git ~/.gemini/config/plugins/md-
 | `Ctrl+E` / `Cmd+E` | 切换「实时分块预览」与「Markdown 源码」模式 |
 | `Ctrl+B` / `Cmd+B` | 加粗选中文本 |
 | `Ctrl+N` / `Cmd+N` | 新建笔记 |
+
+## 其它安装方式
+
+### 手动克隆至全局插件目录（Antigravity App / IDE）
+
+**Windows (PowerShell)**
+```powershell
+git clone https://github.com/Consyllus/md-notes.git "$HOME\.gemini\config\plugins\md-notes"
+```
+
+**macOS / Linux**
+```bash
+git clone https://github.com/Consyllus/md-notes.git ~/.gemini/config/plugins/md-notes
+```
+
+> 若只需在单个项目内启用，也可克隆至项目根目录下的 `.agents/plugins/md-notes`。安装完成后，在对话中输入「打开笔记本」或调用 `/notebook` 即可唤起右侧笔记本面板。
 
 ## 关于与版权
 
