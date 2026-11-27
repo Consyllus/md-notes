@@ -17,6 +17,7 @@ export { decodeFileUriToPath, staticHandlers as handlers, sanitizeNoteFilename }
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const HANDLERS_PATH = join(__dirname, 'handlers.mjs');
 const NO_STORE = { 'Cache-Control': 'no-store, no-cache, must-revalidate' };
+const ASSET_CACHE = { 'Cache-Control': 'no-cache' };
 
 let cachedMtime = 0;
 let cachedHandlers = staticHandlers;
@@ -36,11 +37,11 @@ async function getLatestHandlers() {
   return cachedHandlers;
 }
 
-function readAsset(filename, contentType) {
+function readAsset(filename, contentType, headers = NO_STORE) {
   try {
     return new Response(readFileSync(join(__dirname, filename), 'utf8'), {
       contentType,
-      headers: NO_STORE,
+      headers,
     });
   } catch (err) {
     return new Response(`Asset temporarily unavailable: ${err.message}`, {
@@ -65,6 +66,23 @@ if (isMainModule()) {
   app.page('/', () => readAsset('index.html', 'text/html; charset=utf-8'));
   app.page('/styles.css', () => readAsset('styles.css', 'text/css; charset=utf-8'));
   app.page('/app.js', () => readAsset('app.js', 'application/javascript; charset=utf-8'));
+
+  // Local bundled KaTeX + inlined woff2 fonts + mhchem + copy-tex + completions (offline, zero-CDN)
+  app.page('/vendor/katex/katex.min.css', () =>
+    readAsset('vendor/katex/katex.min.css', 'text/css; charset=utf-8', ASSET_CACHE)
+  );
+  app.page('/vendor/katex/katex.min.js', () =>
+    readAsset('vendor/katex/katex.min.js', 'application/javascript; charset=utf-8', ASSET_CACHE)
+  );
+  app.page('/vendor/katex/mhchem.min.js', () =>
+    readAsset('vendor/katex/mhchem.min.js', 'application/javascript; charset=utf-8', ASSET_CACHE)
+  );
+  app.page('/vendor/katex/copy-tex.min.js', () =>
+    readAsset('vendor/katex/copy-tex.min.js', 'application/javascript; charset=utf-8', ASSET_CACHE)
+  );
+  app.page('/vendor/katex/completions.js', () =>
+    readAsset('vendor/katex/completions.js', 'application/javascript; charset=utf-8', ASSET_CACHE)
+  );
 
   app.api('/api/config', async (data) => (await getLatestHandlers()).getConfig(data), 'GET');
   app.api('/api/config', async (data) => (await getLatestHandlers()).updateConfig(data), 'POST');

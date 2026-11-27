@@ -58,8 +58,11 @@
       phList: '列表项…',
       phTodo: '待办事项…',
       phCode: '输入代码…',
+      phMath: '输入 LaTeX 数学公式（支持 aligned、matrix、\\ce{...} 等）…',
       phFirstLine: '随手记录内容，输入 @@ 可框选片段发给 AI…',
       codeLeaveHint: 'Ctrl+Enter 离开代码块',
+      mathLeaveHint: 'Ctrl+Enter 离开公式块',
+      mathPreviewEmpty: '输入 LaTeX 后在此实时预览公式',
       lockBadgeTitle: '点击修改权限与 @@ 模式设置',
       quoteBadgeTitle: '当前 @@ 框选模式（点击切换）',
       dirIndicatorTitle: '点击打开存储设置',
@@ -183,8 +186,11 @@
       phList: 'List item…',
       phTodo: 'To-do…',
       phCode: 'Enter code…',
+      phMath: 'Enter LaTeX math formula (aligned, matrix, \\ce{...}, etc.)…',
       phFirstLine: 'Start typing to take notes, or type @@ to share context with AI…',
       codeLeaveHint: 'Ctrl+Enter to leave code block',
+      mathLeaveHint: 'Ctrl+Enter to leave math block',
+      mathPreviewEmpty: 'Live LaTeX preview appears here',
       lockBadgeTitle: 'Click to configure permissions & @@ mode',
       quoteBadgeTitle: 'Current @@ selection mode (click to change)',
       dirIndicatorTitle: 'Click to open storage settings',
@@ -330,6 +336,7 @@
     btnBrowseSelect: $('btn-browse-select'),
     browserList: $('browser-list'),
     settingsError: $('settings-error'),
+    latexAc: $('latex-ac'),
     toast: $('toast'),
   };
 
@@ -351,6 +358,7 @@
     currentName: '',
     blocks: [],
     activeBlockIndex: -1,
+    activeBlockTouchedMacro: false,
     sourceMode: false,
     dirty: false,
     saving: false,
@@ -906,6 +914,96 @@
         continue;
       }
 
+      const singleDollarMath = line.match(/^\s*\$\$(.+?)\$\$\s*$/);
+      if (singleDollarMath && !singleDollarMath[1].includes('$$')) {
+        blocks.push(
+          makeBlock('math', {
+            delim: '$$',
+            singleLine: true,
+            text: singleDollarMath[1].trim(),
+          })
+        );
+        i++;
+        continue;
+      }
+
+      const openDollarFence = line.match(/^\s*\$\$(.*)$/);
+      if (openDollarFence && !openDollarFence[1].includes('$$')) {
+        const mathLines = [];
+        const firstRest = openDollarFence[1].trim();
+        if (firstRest) mathLines.push(firstRest);
+        i++;
+        while (i < lines.length) {
+          const cur = lines[i];
+          if (/^\s*\$\$\s*$/.test(cur)) {
+            i++;
+            break;
+          }
+          const trimmedEnd = cur.trimEnd();
+          if (trimmedEnd.endsWith('$$') && !trimmedEnd.endsWith('\\$$')) {
+            const beforeClose = trimmedEnd.slice(0, -2).trimEnd();
+            if (beforeClose) mathLines.push(beforeClose);
+            i++;
+            break;
+          }
+          mathLines.push(cur);
+          i++;
+        }
+        blocks.push(
+          makeBlock('math', {
+            delim: '$$',
+            singleLine: false,
+            text: mathLines.join('\n'),
+          })
+        );
+        continue;
+      }
+
+      const singleBracketMath = line.match(/^\s*\\\[(.+?)\\\]\s*$/);
+      if (singleBracketMath && !singleBracketMath[1].includes('\\]')) {
+        blocks.push(
+          makeBlock('math', {
+            delim: '\\[',
+            singleLine: true,
+            text: singleBracketMath[1].trim(),
+          })
+        );
+        i++;
+        continue;
+      }
+
+      const openBracketFence = line.match(/^\s*\\\[(.*)$/);
+      if (openBracketFence && !openBracketFence[1].includes('\\]')) {
+        const mathLines = [];
+        const firstRest = openBracketFence[1].trim();
+        if (firstRest) mathLines.push(firstRest);
+        i++;
+        while (i < lines.length) {
+          const cur = lines[i];
+          if (/^\s*\\\]\s*$/.test(cur)) {
+            i++;
+            break;
+          }
+          const trimmedEnd = cur.trimEnd();
+          if (trimmedEnd.endsWith('\\]')) {
+            const beforeClose = trimmedEnd.slice(0, -2).trimEnd();
+            if (beforeClose) mathLines.push(beforeClose);
+            i++;
+            break;
+          }
+          mathLines.push(cur);
+          i++;
+        }
+        blocks.push(
+          makeBlock('math', {
+            delim: '\\[',
+            singleLine: false,
+            text: mathLines.join('\n'),
+          })
+        );
+        continue;
+      }
+
       if (
         line.includes('|') &&
         i + 1 < lines.length &&
@@ -1002,6 +1100,14 @@
       case 'todo': return `${pad}- [${b.checked ? 'x' : ' '}] ${b.text}`;
       case 'hr': return '---';
       case 'code': return `\`\`\`${b.lang || ''}\n${b.text}\n\`\`\``;
+      case 'math': {
+        const open = b.delim === '\\[' ? '\\[' : '$$';
+        const close = b.delim === '\\[' ? '\\]' : '$$';
+        if (b.singleLine && !String(b.text || '').includes('\n')) {
+          return `${open} ${b.text} ${close}`;
+        }
+        return `${open}\n${b.text}\n${close}`;
+      }
       case 'table': return b.text;
       default: return b.text;
     }
@@ -1015,8 +1121,100 @@
   }
 
   // -------------------------------------------------------------------------
-  // Safe Inline Markdown & Table Renderer
+  // Safe Inline Markdown, LaTeX Math (KaTeX + mhchem + physics) & Table Renderer
   // -------------------------------------------------------------------------
+
+  const DEFAULT_KATEX_MACROS = Object.freeze({
+    '\\dd': '\\mathop{}\\!\\mathrm{d}',
+    '\\dv': '\\frac{\\mathrm{d}#1}{\\mathrm{d}#2}',
+    '\\pdv': '\\frac{\\partial #1}{\\partial #2}',
+    '\\fdv': '\\frac{\\delta #1}{\\delta #2}',
+    '\\grad': '\\boldsymbol{\\nabla}',
+    '\\curl': '\\boldsymbol{\\nabla}\\times',
+    '\\divergence': '\\boldsymbol{\\nabla}\\cdot',
+    '\\laplacian': '\\nabla^2',
+    '\\abs': '\\left|#1\\right|',
+    '\\norm': '\\left\\|#1\\right\\|',
+    '\\eval': '\\left.#1\\right|',
+    '\\order': '\\mathcal{O}\\left(#1\\right)',
+    '\\ip': '\\left\\langle #1, #2 \\right\\rangle',
+    '\\dyad': '\\left|#1\\middle\\rangle\\!\\middle\\langle #2\\right|',
+    '\\mel': '\\left\\langle #1\\middle|#2\\middle|#3\\right\\rangle',
+    '\\argmax': '\\operatorname*{arg\\,max}',
+    '\\argmin': '\\operatorname*{arg\\,min}',
+    '\\Tr': '\\operatorname{Tr}',
+    '\\tr': '\\operatorname{tr}',
+    '\\rank': '\\operatorname{rank}',
+    '\\diag': '\\operatorname{diag}',
+    '\\Var': '\\operatorname{Var}',
+    '\\Cov': '\\operatorname{Cov}',
+    '\\E': '\\mathbb{E}',
+    '\\Prob': '\\mathbb{P}',
+    '\\R': '\\mathbb{R}',
+    '\\N': '\\mathbb{N}',
+    '\\Z': '\\mathbb{Z}',
+    '\\Q': '\\mathbb{Q}',
+    '\\C': '\\mathbb{C}',
+    '\\transpose': '^{\\mathsf{T}}',
+  });
+
+  const MACRO_DEF_RE =
+    /\\(?:gdef|xdef|def|newcommand|renewcommand|providecommand|DeclareMathOperator)\b/;
+
+  function createNoteMacros() {
+    return { ...DEFAULT_KATEX_MACROS };
+  }
+
+  let katexFallbackPromise = null;
+
+  function loadScriptDynamic(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error(`Failed to load ${src}`));
+      document.head.appendChild(s);
+    });
+  }
+
+  function ensureKatexLoaded() {
+    if (
+      typeof window.katex !== 'undefined' &&
+      typeof window.KATEX_COMPLETIONS !== 'undefined'
+    ) {
+      return Promise.resolve(true);
+    }
+    if (katexFallbackPromise) return katexFallbackPromise;
+    katexFallbackPromise = (async () => {
+      try {
+        if (typeof window.katex === 'undefined') {
+          if (!document.getElementById('katex-hot-css')) {
+            const link = document.createElement('link');
+            link.id = 'katex-hot-css';
+            link.rel = 'stylesheet';
+            link.href = '/api/config?katexAsset=katex.min.css&v=2';
+            const mainStyles = document.querySelector('link[href="/styles.css"]');
+            if (mainStyles && mainStyles.parentNode) {
+              mainStyles.parentNode.insertBefore(link, mainStyles);
+            } else {
+              document.head.appendChild(link);
+            }
+          }
+          await loadScriptDynamic('/api/config?katexAsset=katex.min.js&v=2');
+          await loadScriptDynamic('/api/config?katexAsset=mhchem.min.js&v=2').catch(() => {});
+          await loadScriptDynamic('/api/config?katexAsset=copy-tex.min.js&v=2').catch(() => {});
+        }
+        if (typeof window.KATEX_COMPLETIONS === 'undefined') {
+          await loadScriptDynamic('/api/config?katexAsset=completions.js&v=2').catch(() => {});
+        }
+        return typeof window.katex !== 'undefined';
+      } catch {
+        katexFallbackPromise = null;
+        return false;
+      }
+    })();
+    return katexFallbackPromise;
+  }
 
   function escapeHtml(str) {
     return String(str)
@@ -1026,14 +1224,175 @@
       .replace(/"/g, '&quot;');
   }
 
-  function renderInline(text) {
-    let s = escapeHtml(text);
+  function renderKatexHtml(tex, displayMode, macros) {
+    const cleanTex = String(tex || '').trim();
+    if (!cleanTex) return '';
+    if (typeof window.katex === 'undefined') {
+      const delim = displayMode ? '$$' : '$';
+      return `<code class="math-fallback">${escapeHtml(`${delim}${cleanTex}${delim}`)}</code>`;
+    }
+    const targetMacros = macros || createNoteMacros();
+    const hasMacroDef = MACRO_DEF_RE.test(cleanTex);
+    try {
+      return window.katex.renderToString(cleanTex, {
+        displayMode: Boolean(displayMode),
+        throwOnError: false,
+        errorColor: '#d14343',
+        strict: 'ignore',
+        trust: false,
+        globalGroup: hasMacroDef,
+        macros: targetMacros,
+      });
+    } catch {
+      return `<code class="math-fallback">${escapeHtml(cleanTex)}</code>`;
+    }
+  }
+
+  function findClosingSeq(str, startIdx, closeSeq) {
+    let j = startIdx;
+    while (j <= str.length - closeSeq.length) {
+      if (str[j] === '\\') {
+        if (str.startsWith(closeSeq, j)) return j;
+        j += 2;
+        continue;
+      }
+      if (str.startsWith(closeSeq, j)) return j;
+      j++;
+    }
+    return -1;
+  }
+
+  function extractInlineMathTokens(str, mathTokens, macros) {
+    let out = '';
+    let i = 0;
+    const len = str.length;
+
+    while (i < len) {
+      if (str[i] === '\\') {
+        if (str.startsWith('\\\\', i)) {
+          out += '\\\\';
+          i += 2;
+          continue;
+        }
+        if (str.startsWith('\\$', i)) {
+          out += '\u0000ESCAPED_DOLLAR\u0000';
+          i += 2;
+          continue;
+        }
+        if (str.startsWith('\\[', i)) {
+          const endIdx = findClosingSeq(str, i + 2, '\\]');
+          if (endIdx !== -1) {
+            const inner = str.slice(i + 2, endIdx);
+            if (inner.trim()) {
+              const tokenIdx = mathTokens.length;
+              mathTokens.push(
+                `<span class="math-inline-display">${renderKatexHtml(inner, true, macros)}</span>`
+              );
+              out += `\u0000MATH${tokenIdx}\u0000`;
+              i = endIdx + 2;
+              continue;
+            }
+          }
+        }
+        if (str.startsWith('\\(', i)) {
+          const endIdx = findClosingSeq(str, i + 2, '\\)');
+          if (endIdx !== -1) {
+            const inner = str.slice(i + 2, endIdx);
+            if (inner.trim()) {
+              const tokenIdx = mathTokens.length;
+              mathTokens.push(renderKatexHtml(inner, false, macros));
+              out += `\u0000MATH${tokenIdx}\u0000`;
+              i = endIdx + 2;
+              continue;
+            }
+          }
+        }
+        out += '\\';
+        i++;
+        continue;
+      }
+
+      // Inline $$ ... $$
+      if (str.startsWith('$$', i) && str[i + 2] !== '$') {
+        const endIdx = findClosingSeq(str, i + 2, '$$');
+        if (endIdx !== -1) {
+          const inner = str.slice(i + 2, endIdx);
+          if (inner.trim()) {
+            const tokenIdx = mathTokens.length;
+            mathTokens.push(
+              `<span class="math-inline-display">${renderKatexHtml(inner, true, macros)}</span>`
+            );
+            out += `\u0000MATH${tokenIdx}\u0000`;
+            i = endIdx + 2;
+            continue;
+          }
+        }
+      }
+
+      // Inline $ ... $ (smart currency disambiguation)
+      if (str[i] === '$' && str[i + 1] !== '$') {
+        const prevCh = i > 0 ? str[i - 1] : '';
+        const nextCh = i + 1 < len ? str[i + 1] : '';
+        const prevOk = !prevCh || !/[0-9A-Za-z$]/.test(prevCh);
+        const nextOk = Boolean(nextCh) && !/\s/.test(nextCh);
+
+        if (prevOk && nextOk) {
+          let j = i + 1;
+          let matchedEnd = -1;
+          while (j < len && str[j] !== '\n') {
+            if (str[j] === '\\') {
+              j += 2;
+              continue;
+            }
+            if (str[j] === '$' && str[j + 1] !== '$') {
+              const beforeClose = str[j - 1];
+              const afterClose = j + 1 < len ? str[j + 1] : '';
+              if (!/\s/.test(beforeClose) && !/[0-9]/.test(afterClose)) {
+                matchedEnd = j;
+              }
+              break;
+            }
+            j++;
+          }
+          if (matchedEnd !== -1) {
+            const inner = str.slice(i + 1, matchedEnd);
+            if (inner.trim()) {
+              const tokenIdx = mathTokens.length;
+              mathTokens.push(renderKatexHtml(inner, false, macros));
+              out += `\u0000MATH${tokenIdx}\u0000`;
+              i = matchedEnd + 1;
+              continue;
+            }
+          }
+        }
+      }
+
+      out += str[i];
+      i++;
+    }
+
+    return out.replace(/\u0000ESCAPED_DOLLAR\u0000/g, '$');
+  }
+
+  function renderInline(text, macros) {
+    const raw = String(text ?? '');
     const codeTokens = [];
-    s = s.replace(/`([^`]+)`/g, (_, inner) => {
+    const mathTokens = [];
+
+    // 1. Protect inline code spans first so `$HOME` / `$1` inside backticks stay literal
+    let s = raw.replace(/`([^`]+)`/g, (_, inner) => {
       const idx = codeTokens.length;
-      codeTokens.push(`<code>${inner}</code>`);
+      codeTokens.push(`<code>${escapeHtml(inner)}</code>`);
       return `\u0000CODE${idx}\u0000`;
     });
+
+    // 2. Extract and render LaTeX math before HTML escaping & Markdown emphasis (* / _)
+    s = extractInlineMathTokens(s, mathTokens, macros);
+
+    // 3. Escape remaining plain-text HTML
+    s = escapeHtml(s);
+
+    // 4. Standard inline Markdown formatting
     s = s.replace(
       /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
       '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
@@ -1043,28 +1402,717 @@
     s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
     s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
     s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+
+    // 5. Restore rendered math & code tokens
+    s = s.replace(/\u0000MATH(\d+)\u0000/g, (_, idx) => mathTokens[Number(idx)] || '');
     s = s.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeTokens[Number(idx)] || '');
     return s;
   }
 
-  function renderTableHtml(raw) {
+  function splitMarkdownTableRow(row) {
+    let trimmed = String(row || '').trim();
+    if (trimmed.startsWith('|')) trimmed = trimmed.slice(1);
+    if (trimmed.endsWith('|') && !trimmed.endsWith('\\|')) trimmed = trimmed.slice(0, -1);
+
+    const cells = [];
+    let cur = '';
+    let inCode = false;
+    let inMathDollar = 0; // 0 = outside, 1 = $, 2 = $$
+    let inMathBracket = ''; // '' | ')' | ']'
+
+    for (let i = 0; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (ch === '\\' && i + 1 < trimmed.length) {
+        const nxt = trimmed[i + 1];
+        if (!inCode && inMathDollar === 0 && !inMathBracket) {
+          if (nxt === '|') {
+            cur += '|';
+            i++;
+            continue;
+          }
+          if (nxt === '(' || nxt === '[') {
+            inMathBracket = nxt === '(' ? ')' : ']';
+            cur += ch + nxt;
+            i++;
+            continue;
+          }
+        } else if (inMathBracket && nxt === inMathBracket) {
+          inMathBracket = '';
+          cur += ch + nxt;
+          i++;
+          continue;
+        }
+        cur += ch + nxt;
+        i++;
+        continue;
+      }
+      if (ch === '`' && inMathDollar === 0 && !inMathBracket) {
+        inCode = !inCode;
+        cur += ch;
+        continue;
+      }
+      if (!inCode && !inMathBracket && ch === '$') {
+        if (trimmed[i + 1] === '$') {
+          inMathDollar = inMathDollar === 2 ? 0 : inMathDollar === 0 ? 2 : inMathDollar;
+          cur += '$$';
+          i++;
+          continue;
+        }
+        inMathDollar = inMathDollar === 1 ? 0 : inMathDollar === 0 ? 1 : inMathDollar;
+        cur += ch;
+        continue;
+      }
+      if (ch === '|' && !inCode && inMathDollar === 0 && !inMathBracket) {
+        cells.push(cur.trim());
+        cur = '';
+        continue;
+      }
+      cur += ch;
+    }
+    cells.push(cur.trim());
+    return cells;
+  }
+
+  function renderTableHtml(raw, macros) {
     const lines = String(raw || '').trim().split(/\r?\n/);
-    if (lines.length < 2) return `<p>${renderInline(raw)}</p>`;
-    const splitRow = (r) =>
-      r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
-    const headers = splitRow(lines[0]);
-    const rows = lines.slice(2).map(splitRow);
-    const thead = `<thead><tr>${headers.map((h) => `<th>${renderInline(h)}</th>`).join('')}</tr></thead>`;
+    if (lines.length < 2) return `<p>${renderInline(raw, macros)}</p>`;
+    const headers = splitMarkdownTableRow(lines[0]);
+    const rows = lines.slice(2).map(splitMarkdownTableRow);
+    const thead = `<thead><tr>${headers.map((h) => `<th>${renderInline(h, macros)}</th>`).join('')}</tr></thead>`;
     const tbody = `<tbody>${rows
-      .map((r) => `<tr>${headers.map((_, idx) => `<td>${renderInline(r[idx] || '')}</td>`).join('')}</tr>`)
+      .map(
+        (r) =>
+          `<tr>${headers.map((_, idx) => `<td>${renderInline(r[idx] || '', macros)}</td>`).join('')}</tr>`
+      )
       .join('')}</tbody>`;
     return `<table>${thead}${tbody}</table>`;
+  }
+
+  function computeMacrosBeforeBlock(targetIdx) {
+    const macros = createNoteMacros();
+    const limit = Math.min(targetIdx, state.blocks.length);
+    for (let i = 0; i < limit; i++) {
+      const b = state.blocks[i];
+      if (!b || !b.text || b.type === 'code' || b.type === 'hr') continue;
+      if (!MACRO_DEF_RE.test(b.text)) continue;
+      if (b.type === 'math') {
+        renderKatexHtml(b.text, true, macros);
+      } else if (b.type === 'table') {
+        renderTableHtml(b.text, macros);
+      } else {
+        renderInline(b.text, macros);
+      }
+    }
+    return macros;
   }
 
   function autoResizeTextarea(ta) {
     if (!ta) return;
     ta.style.height = 'auto';
     ta.style.height = `${Math.max(ta.scrollHeight, 24)}px`;
+  }
+
+  // -------------------------------------------------------------------------
+  // 0ms Offline KaTeX Command & Environment Autocomplete Engine
+  // -------------------------------------------------------------------------
+
+  const acPreviewCache = new Map();
+  let caretMirrorEl = null;
+
+  const acState = {
+    open: false,
+    ta: null,
+    block: null,
+    onAfterAccept: null,
+    items: [],
+    selectedIdx: 0,
+    anchorPos: 0,
+  };
+
+  function getMathCaretContext(ta, block = null) {
+    if (!ta || ta.selectionStart !== ta.selectionEnd) {
+      return { inMath: false, multiline: false };
+    }
+    if (block) {
+      if (block.type === 'code' || block.type === 'hr') {
+        return { inMath: false, multiline: false };
+      }
+      if (block.type === 'math') {
+        return { inMath: true, multiline: true };
+      }
+    }
+
+    const val = ta.value;
+    const caret = ta.selectionStart;
+    const isSource = !block;
+
+    let inCodeFence = false;
+    let inInlineCode = false;
+    let inDoubleDollar = false;
+    let inSingleDollar = false;
+    let inBracketDisplay = false;
+    let inParenInline = false;
+
+    let i = 0;
+    while (i < caret) {
+      if (isSource && (i === 0 || val[i - 1] === '\n')) {
+        const lineEnd = val.indexOf('\n', i);
+        const lineStr = lineEnd === -1 ? val.slice(i) : val.slice(i, lineEnd);
+        if (/^\s*```/.test(lineStr)) {
+          inCodeFence = !inCodeFence;
+          if (lineEnd === -1 || lineEnd >= caret) {
+            return { inMath: false, multiline: false };
+          }
+          i = lineEnd + 1;
+          continue;
+        }
+      }
+
+      if (inCodeFence) {
+        i++;
+        continue;
+      }
+
+      const ch = val[i];
+      if (ch === '\n') {
+        inInlineCode = false;
+        inSingleDollar = false;
+        i++;
+        continue;
+      }
+
+      if (ch === '`') {
+        inInlineCode = !inInlineCode;
+        i++;
+        continue;
+      }
+      if (inInlineCode) {
+        i++;
+        continue;
+      }
+
+      if (ch === '\\') {
+        const nxt = val[i + 1];
+        if (nxt === '[') {
+          inBracketDisplay = true;
+          i += 2;
+          continue;
+        }
+        if (nxt === ']') {
+          inBracketDisplay = false;
+          i += 2;
+          continue;
+        }
+        if (nxt === '(') {
+          inParenInline = true;
+          i += 2;
+          continue;
+        }
+        if (nxt === ')') {
+          inParenInline = false;
+          i += 2;
+          continue;
+        }
+        if (nxt === '$' || nxt === '\\' || nxt === '`') {
+          i += 2;
+          continue;
+        }
+        i++;
+        continue;
+      }
+
+      if (ch === '$') {
+        if (val[i + 1] === '$') {
+          inDoubleDollar = !inDoubleDollar;
+          i += 2;
+          continue;
+        }
+        if (!inDoubleDollar) {
+          inSingleDollar = !inSingleDollar;
+        }
+        i++;
+        continue;
+      }
+
+      i++;
+    }
+
+    if (inBracketDisplay || inDoubleDollar) {
+      return { inMath: true, multiline: isSource };
+    }
+    if (inParenInline || inSingleDollar) {
+      return { inMath: true, multiline: false };
+    }
+    return { inMath: false, multiline: false };
+  }
+
+  function scoreAcCandidate(bare, query, tier) {
+    if (!query) return 1000 + tier * 300 - bare.length * 5;
+    const qLow = query.toLowerCase();
+    const bLow = bare.toLowerCase();
+    if (bare === query) return 10000 + tier * 200;
+    if (bLow === qLow) return 9000 + tier * 200;
+    if (bare.startsWith(query)) return 6000 + tier * 400 - bare.length * 8;
+    if (bLow.startsWith(qLow)) return 4000 + tier * 350 - bare.length * 8;
+    if (query.length >= 2) {
+      const pos = bLow.indexOf(qLow);
+      if (pos !== -1) {
+        return 1500 + tier * 300 - pos * 15 - bare.length * 6;
+      }
+    }
+    return -1;
+  }
+
+  function buildEnvInsertTemplate(envName, insArgs, multiline, afterCaret) {
+    const hasEndAlready = afterCaret.includes(`\\end{${envName}}`);
+    if (hasEndAlready) {
+      return `\\begin{${envName}}${insArgs || '$0'}`;
+    }
+    const argPart = insArgs || '';
+    const hasArgCursor = argPart.includes('$0');
+    const bodyCursor = hasArgCursor ? '' : '$0';
+    if (multiline) {
+      return `\\begin{${envName}}${argPart}\n  ${bodyCursor}\n\\end{${envName}}`;
+    }
+    return `\\begin{${envName}}${argPart} ${bodyCursor} \\end{${envName}}`;
+  }
+
+  function queryLatexCompletions(beforeCaret, afterCaret, multiline) {
+    const catalog = window.KATEX_COMPLETIONS;
+    if (!catalog) return null;
+
+    // 1. Inside \begin{... or \end{...
+    const envTag = beforeCaret.match(/(?:^|[^\\])(?:\\\\)*(\\(begin|end)\{([A-Za-z*]*))$/);
+    if (envTag) {
+      const fullSeq = envTag[1];
+      const tagKind = envTag[2];
+      const query = envTag[3] || '';
+      const replaceStart = beforeCaret.length - fullSeq.length;
+      const consumeRight = afterCaret.startsWith('}') ? 1 : 0;
+      const scored = [];
+
+      for (const [envName, insArgs, prev, tier] of catalog.envs) {
+        const sc = scoreAcCandidate(envName, query, tier);
+        if (sc < 0) continue;
+        const ins =
+          tagKind === 'end'
+            ? `\\end{${envName}}$0`
+            : buildEnvInsertTemplate(envName, insArgs, multiline, afterCaret.slice(consumeRight));
+        scored.push({
+          score: sc,
+          label: `\\${tagKind}{${envName}}`,
+          ins,
+          prev,
+          replaceStart,
+          replaceEnd: beforeCaret.length + consumeRight,
+        });
+      }
+      scored.sort((a, b) => b.score - a.score);
+      return scored.length ? { anchorPos: replaceStart, items: scored.slice(0, 12) } : null;
+    }
+
+    // 2. Command or shorthand environment after single unescaped \
+    const cmdMatch = beforeCaret.match(/(?:^|[^\\])(?:\\\\)*(\\[A-Za-z]+)$/);
+    if (!cmdMatch) return null;
+
+    const fullCmd = cmdMatch[1]; // e.g. \fr
+    const query = fullCmd.slice(1);
+    const replaceStart = beforeCaret.length - fullCmd.length;
+    const replaceEnd = beforeCaret.length;
+    const scored = [];
+
+    // Include \begin{...} trigger itself
+    const beginScore = scoreAcCandidate('begin', query, 2);
+    if (beginScore >= 0) {
+      scored.push({
+        score: beginScore,
+        label: '\\begin{…}',
+        ins: '\\begin{$0}',
+        prev: '\\begin{bmatrix} a & b \\end{bmatrix}',
+        replaceStart,
+        replaceEnd,
+        retrigger: true,
+      });
+    }
+
+    for (const [name, ins, prev, tier] of catalog.cmds) {
+      const bare = name.slice(1);
+      const sc = scoreAcCandidate(bare, query, tier);
+      if (sc < 0) continue;
+      const fullIns = ins || name;
+      scored.push({
+        score: sc,
+        label: fullIns.replace(/\$0/g, ''),
+        ins: fullIns,
+        prev: prev || name,
+        replaceStart,
+        replaceEnd,
+      });
+    }
+
+    for (const [envName, insArgs, prev, tier] of catalog.envs) {
+      const sc = scoreAcCandidate(envName, query, tier);
+      if (sc < 0) continue;
+      scored.push({
+        score: sc + 20,
+        label: `\\begin{${envName}}`,
+        ins: buildEnvInsertTemplate(envName, insArgs, multiline, afterCaret),
+        prev,
+        replaceStart,
+        replaceEnd,
+      });
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.length ? { anchorPos: replaceStart, items: scored.slice(0, 12) } : null;
+  }
+
+  function renderAcPreviewHtml(prevTex) {
+    if (!prevTex) return '';
+    if (acPreviewCache.has(prevTex)) {
+      return acPreviewCache.get(prevTex);
+    }
+    let html = '';
+    if (typeof window.katex !== 'undefined') {
+      try {
+        html = window.katex.renderToString(prevTex, {
+          displayMode: false,
+          throwOnError: false,
+          strict: 'ignore',
+          trust: false,
+          macros: createNoteMacros(),
+        });
+      } catch {
+        html = escapeHtml(prevTex);
+      }
+    } else {
+      html = escapeHtml(prevTex);
+    }
+    acPreviewCache.set(prevTex, html);
+    return html;
+  }
+
+  function getTextareaCaretCoords(ta, charIndex) {
+    if (typeof window.getComputedStyle !== 'function') {
+      return { left: 16, top: 40, lineHeight: 20 };
+    }
+    if (!caretMirrorEl) {
+      caretMirrorEl = document.createElement('div');
+      caretMirrorEl.id = 'latex-caret-mirror';
+      caretMirrorEl.setAttribute('aria-hidden', 'true');
+      caretMirrorEl.style.position = 'fixed';
+      caretMirrorEl.style.top = '-9999px';
+      caretMirrorEl.style.left = '-9999px';
+      caretMirrorEl.style.visibility = 'hidden';
+      caretMirrorEl.style.pointerEvents = 'none';
+      caretMirrorEl.style.whiteSpace = 'pre-wrap';
+      caretMirrorEl.style.wordBreak = 'break-word';
+      document.body.appendChild(caretMirrorEl);
+    }
+
+    const cs = window.getComputedStyle(ta);
+    const copyProps = [
+      'boxSizing',
+      'width',
+      'paddingTop',
+      'paddingRight',
+      'paddingBottom',
+      'paddingLeft',
+      'borderTopWidth',
+      'borderRightWidth',
+      'borderBottomWidth',
+      'borderLeftWidth',
+      'fontFamily',
+      'fontSize',
+      'fontWeight',
+      'fontStyle',
+      'lineHeight',
+      'letterSpacing',
+      'tabSize',
+    ];
+    for (const p of copyProps) {
+      caretMirrorEl.style[p] = cs[p];
+    }
+
+    caretMirrorEl.textContent = ta.value.slice(0, charIndex);
+    const marker = document.createElement('span');
+    marker.textContent = ta.value.slice(charIndex, charIndex + 1) || '|';
+    caretMirrorEl.appendChild(marker);
+
+    const taRect = ta.getBoundingClientRect();
+    const appNode = document.getElementById('app') || document.body;
+    const appRect = appNode.getBoundingClientRect();
+    const lineH = parseFloat(cs.lineHeight) || (parseFloat(cs.fontSize) || 13) * 1.6;
+
+    return {
+      left: taRect.left - appRect.left + marker.offsetLeft - ta.scrollLeft,
+      top: taRect.top - appRect.top + marker.offsetTop - ta.scrollTop,
+      lineHeight: lineH,
+      appWidth: appRect.width || 340,
+      appHeight: appRect.height || 600,
+    };
+  }
+
+  function positionLatexAcPopup() {
+    if (!acState.open || !acState.ta || !el.latexAc) return;
+    const coords = getTextareaCaretCoords(acState.ta, acState.anchorPos);
+    const popupW = Math.min(280, Math.max(210, coords.appWidth - 16));
+    el.latexAc.style.width = `${popupW}px`;
+
+    const popupH = Math.min(228, el.latexAc.scrollHeight || 180);
+    let left = Math.max(8, Math.min(coords.left, coords.appWidth - popupW - 8));
+    let top = coords.top + coords.lineHeight + 4;
+    if (top + popupH > coords.appHeight - 28 && coords.top - popupH - 4 > 36) {
+      top = coords.top - popupH - 4;
+    }
+    el.latexAc.style.left = `${Math.round(left)}px`;
+    el.latexAc.style.top = `${Math.round(top)}px`;
+  }
+
+  function closeLatexAc() {
+    if (!acState.open && el.latexAc?.classList.contains('hidden')) return;
+    acState.open = false;
+    acState.ta = null;
+    acState.block = null;
+    acState.onAfterAccept = null;
+    acState.items = [];
+    acState.selectedIdx = 0;
+    if (el.latexAc) {
+      el.latexAc.classList.add('hidden');
+      el.latexAc.innerHTML = '';
+    }
+  }
+
+  function syncLatexAcSelectionInDom() {
+    if (!el.latexAc) return;
+    const children = el.latexAc.children;
+    for (let i = 0; i < children.length; i++) {
+      const isSel = i === acState.selectedIdx;
+      children[i].classList.toggle('is-selected', isSel);
+      if (isSel && typeof children[i].scrollIntoView === 'function') {
+        children[i].scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }
+
+  function acceptLatexAcItem(index = acState.selectedIdx) {
+    const item = acState.items[index];
+    const ta = acState.ta;
+    const block = acState.block;
+    const afterCb = acState.onAfterAccept;
+    if (!item || !ta) {
+      closeLatexAc();
+      return false;
+    }
+
+    const val = ta.value;
+    const cursorTokenPos = item.ins.indexOf('$0');
+    const cleanIns = item.ins.replace(/\$0/g, '');
+    const caretOffset = cursorTokenPos !== -1 ? cursorTokenPos : cleanIns.length;
+
+    const nextVal = val.slice(0, item.replaceStart) + cleanIns + val.slice(item.replaceEnd);
+    const nextCaret = item.replaceStart + caretOffset;
+
+    ta.value = nextVal;
+    ta.focus();
+    ta.setSelectionRange(nextCaret, nextCaret);
+
+    if (block) {
+      block.text = nextVal;
+      if (MACRO_DEF_RE.test(block.text)) {
+        state.activeBlockTouchedMacro = true;
+      }
+      if (block.type === 'math' && block.text.includes('\n')) {
+        block.singleLine = false;
+      }
+    }
+
+    closeLatexAc();
+    if (typeof afterCb === 'function') {
+      afterCb();
+    } else {
+      scheduleSave();
+    }
+
+    if (item.retrigger) {
+      updateLatexAcForTextarea(ta, block, afterCb);
+    }
+    return true;
+  }
+
+  function renderLatexAcPopup() {
+    if (!el.latexAc || !acState.items.length) {
+      closeLatexAc();
+      return;
+    }
+    el.latexAc.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (let i = 0; i < acState.items.length; i++) {
+      const it = acState.items[i];
+      const row = document.createElement('div');
+      row.className = `latex-ac-item${i === acState.selectedIdx ? ' is-selected' : ''}`;
+      row.dataset.idx = String(i);
+      row.setAttribute('role', 'option');
+
+      const cmdSpan = document.createElement('span');
+      cmdSpan.className = 'latex-ac-cmd';
+      cmdSpan.textContent = it.label;
+
+      const prevSpan = document.createElement('span');
+      prevSpan.className = 'latex-ac-prev';
+      prevSpan.innerHTML = renderAcPreviewHtml(it.prev);
+
+      row.append(cmdSpan, prevSpan);
+      frag.appendChild(row);
+    }
+    el.latexAc.appendChild(frag);
+    el.latexAc.classList.remove('hidden');
+    positionLatexAcPopup();
+  }
+
+  function updateLatexAcForTextarea(ta, block = null, onAfterAccept = null) {
+    if (!ta || !el.latexAc) {
+      closeLatexAc();
+      return;
+    }
+    const mathCtx = getMathCaretContext(ta, block);
+    if (!mathCtx.inMath) {
+      closeLatexAc();
+      return;
+    }
+    const caret = ta.selectionStart;
+    const before = ta.value.slice(0, caret);
+    const after = ta.value.slice(caret);
+    const res = queryLatexCompletions(before, after, mathCtx.multiline);
+    if (!res || !res.items.length) {
+      closeLatexAc();
+      return;
+    }
+
+    acState.open = true;
+    acState.ta = ta;
+    acState.block = block;
+    acState.onAfterAccept = onAfterAccept;
+    acState.anchorPos = res.anchorPos;
+    acState.items = res.items;
+    acState.selectedIdx = 0;
+    renderLatexAcPopup();
+  }
+
+  function tryMathBraceTabJump(ta, block = null) {
+    if (!ta || ta.selectionStart !== ta.selectionEnd) return false;
+    if (!getMathCaretContext(ta, block).inMath) return false;
+    const pos = ta.selectionStart;
+    const after = ta.value.slice(pos);
+    const nextArg = after.match(/^[ \t]*\}\{/);
+    if (nextArg) {
+      const target = pos + nextArg[0].length;
+      ta.setSelectionRange(target, target);
+      return true;
+    }
+    const exitDelim = after.match(/^[ \t]*(?:\}|\)|\]|\$\$|\$|\\\)|\\\])/);
+    if (exitDelim) {
+      const target = pos + exitDelim[0].length;
+      ta.setSelectionRange(target, target);
+      return true;
+    }
+    return false;
+  }
+
+  // Chinese IME helper:
+  // 1) Typing `￥￥` (or `¥¥`) replaces it with `$$` and places the caret right in the middle (`$|$`);
+  //    typing `￥￥` again inside empty `$|$` upgrades it to `$$|$$`.
+  // 2) Typing Chinese `、` (from the `\` key while in Chinese IME) inside math mode auto-converts to `\`.
+  function tryNormalizeChineseMathInput(ta, block = null) {
+    if (!ta || ta.selectionStart !== ta.selectionEnd) return false;
+    if (block && (block.type === 'code' || block.type === 'hr')) return false;
+
+    const val = ta.value;
+    const caret = ta.selectionStart;
+
+    if (caret >= 2) {
+      const prevTwo = val.slice(caret - 2, caret);
+      if (/^[￥¥]{2}$/.test(prevTwo)) {
+        if (!block) {
+          // In raw source mode, ensure we're not inside a code block/span
+          const probe = val.slice(0, caret - 2);
+          const fenceCount = (probe.match(/^\s*```/gm) || []).length;
+          const lineStart = probe.lastIndexOf('\n') + 1;
+          const tickCount = (probe.slice(lineStart).match(/`/g) || []).length;
+          if (fenceCount % 2 === 1 || tickCount % 2 === 1) return false;
+        }
+        const nextVal = val.slice(0, caret - 2) + '$$' + val.slice(caret);
+        const nextCaret = caret - 1;
+        ta.value = nextVal;
+        ta.setSelectionRange(nextCaret, nextCaret);
+        if (block) block.text = nextVal;
+        return true;
+      }
+    }
+
+    if (caret >= 1 && val[caret - 1] === '、') {
+      if (getMathCaretContext(ta, block).inMath) {
+        const nextVal = val.slice(0, caret - 1) + '\\' + val.slice(caret);
+        ta.value = nextVal;
+        ta.setSelectionRange(caret, caret);
+        if (block) block.text = nextVal;
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function tryDeleteEmptyDollarPair(e, ta, block = null) {
+    if (e.key !== 'Backspace' || ta.selectionStart !== ta.selectionEnd) return false;
+    if (block && (block.type === 'code' || block.type === 'hr' || block.type === 'math')) {
+      return false;
+    }
+    const pos = ta.selectionStart;
+    const val = ta.value;
+    if (pos > 0 && val[pos - 1] === '$' && val[pos] === '$' && val[pos - 2] !== '\\') {
+      e.preventDefault();
+      const nextVal = val.slice(0, pos - 1) + val.slice(pos + 1);
+      ta.value = nextVal;
+      ta.setSelectionRange(pos - 1, pos - 1);
+      if (block) block.text = nextVal;
+      return true;
+    }
+    return false;
+  }
+
+  function handleLatexAcKeydown(e, ta, block = null) {
+    if (!acState.open || acState.ta !== ta) return false;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      acState.selectedIdx = (acState.selectedIdx + 1) % acState.items.length;
+      syncLatexAcSelectionInDom();
+      return true;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      acState.selectedIdx =
+        (acState.selectedIdx - 1 + acState.items.length) % acState.items.length;
+      syncLatexAcSelectionInDom();
+      return true;
+    }
+    if (
+      (e.key === 'Tab' && !e.shiftKey) ||
+      (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.shiftKey)
+    ) {
+      e.preventDefault();
+      e.stopPropagation();
+      return acceptLatexAcItem(acState.selectedIdx);
+    }
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeLatexAc();
+      return true;
+    }
+    return false;
   }
 
   // -------------------------------------------------------------------------
@@ -1080,6 +2128,7 @@
     if (b.type === 'ul' || b.type === 'ol') return t('phList');
     if (b.type === 'todo') return t('phTodo');
     if (b.type === 'code') return t('phCode');
+    if (b.type === 'math') return t('phMath');
     if (idx === 0 && state.blocks.length <= 2) {
       return t('phFirstLine');
     }
@@ -1169,7 +2218,7 @@
   }
 
   function tryExtractAtAtTrigger(block, ta, idx) {
-    if (block.type === 'code') return false;
+    if (block.type === 'code' || block.type === 'math') return false;
     const val = ta.value;
     const atPos = val.indexOf('@@');
     if (atPos === -1) return false;
@@ -1259,21 +2308,51 @@
   function replaceSingleBlockNode(idx) {
     if (idx < 0 || idx >= state.blocks.length) return;
     const existing = el.blocksRoot.children[idx];
-    if (!existing) {
+    if (
+      !existing ||
+      state.activeBlockTouchedMacro ||
+      MACRO_DEF_RE.test(state.blocks[idx]?.text || '')
+    ) {
+      state.activeBlockTouchedMacro = false;
       renderLiveBlocks();
       return;
     }
-    const nextNode = buildBlockElement(state.blocks[idx], idx);
+    const macros = computeMacrosBeforeBlock(idx);
+    const nextNode = buildBlockElement(state.blocks[idx], idx, macros);
     el.blocksRoot.replaceChild(nextNode, existing);
     if (state.selBox.active) renderSelectionOverlay();
+  }
+
+  function normalizeStandaloneMathParagraph(block) {
+    if (!block || block.type !== 'p' || !block.text) return;
+    const val = block.text;
+    const oneLine =
+      val.match(/^\s*(\$\$)(.+?)\$\$\s*$/) || val.match(/^\s*(\\\[)(.+?)\\\]\s*$/);
+    if (oneLine && !oneLine[2].includes(oneLine[1] === '\\[' ? '\\]' : '$$')) {
+      block.type = 'math';
+      block.delim = oneLine[1] === '\\[' ? '\\[' : '$$';
+      block.singleLine = true;
+      block.text = oneLine[2].trim();
+    }
   }
 
   function activateBlock(index, caretPos = null, forceFullRender = false) {
     if (index < 0 || index >= state.blocks.length) return;
     const prevIdx = state.activeBlockIndex;
+    if (prevIdx !== -1 && prevIdx !== index && state.blocks[prevIdx]) {
+      normalizeStandaloneMathParagraph(state.blocks[prevIdx]);
+    }
+    const prevHadMacro =
+      state.activeBlockTouchedMacro ||
+      (prevIdx >= 0 && MACRO_DEF_RE.test(state.blocks[prevIdx]?.text || ''));
     state.activeBlockIndex = index;
+    state.activeBlockTouchedMacro = MACRO_DEF_RE.test(state.blocks[index]?.text || '');
 
-    if (forceFullRender || el.blocksRoot.children.length !== state.blocks.length) {
+    if (
+      forceFullRender ||
+      prevHadMacro ||
+      el.blocksRoot.children.length !== state.blocks.length
+    ) {
       renderLiveBlocks();
     } else {
       if (prevIdx !== -1 && prevIdx !== index && prevIdx < state.blocks.length) {
@@ -1297,8 +2376,12 @@
   }
 
   function deactivateBlocks() {
+    closeLatexAc();
     if (state.activeBlockIndex === -1) return;
     const prevIdx = state.activeBlockIndex;
+    if (state.blocks[prevIdx]) {
+      normalizeStandaloneMathParagraph(state.blocks[prevIdx]);
+    }
     state.activeBlockIndex = -1;
     if (
       prevIdx >= 0 &&
@@ -1311,7 +2394,7 @@
     }
   }
 
-  function buildBlockElement(block, idx) {
+  function buildBlockElement(block, idx, macros = null) {
     const isActive = idx === state.activeBlockIndex;
     const row = document.createElement('div');
     row.className = computeBlockClass(block, isActive);
@@ -1373,6 +2456,18 @@
       row.appendChild(bar);
     }
 
+    if (block.type === 'math' && isActive) {
+      const bar = document.createElement('div');
+      bar.className = 'math-lang-bar';
+      const tag = document.createElement('span');
+      tag.className = 'math-lang-tag';
+      tag.textContent = block.delim === '\\[' ? '\\[ \\] LaTeX' : '$$ LaTeX';
+      const hint = document.createElement('span');
+      hint.textContent = t('mathLeaveHint');
+      bar.append(tag, hint);
+      row.appendChild(bar);
+    }
+
     const prefixNode = buildBlockPrefixNode(block, isActive, row);
     if (prefixNode) {
       row.appendChild(prefixNode);
@@ -1389,18 +2484,55 @@
       ta.value = block.text;
       ta.placeholder = blockPlaceholder(block, idx);
 
+      let mathPreviewEl = null;
+      let baseMathMacros = null;
+      const updateMathLivePreview = () => {
+        if (!mathPreviewEl) return;
+        const rawTex = block.text.trim();
+        if (!rawTex) {
+          mathPreviewEl.innerHTML = `<span class="block-placeholder">${escapeHtml(
+            t('mathPreviewEmpty')
+          )}</span>`;
+          return;
+        }
+        const localMacros = { ...(baseMathMacros || createNoteMacros()) };
+        mathPreviewEl.innerHTML = renderKatexHtml(rawTex, true, localMacros);
+      };
+
+      if (block.type === 'math') {
+        baseMathMacros = macros ? { ...macros } : computeMacrosBeforeBlock(idx);
+        mathPreviewEl = document.createElement('div');
+        mathPreviewEl.className = 'math-live-preview';
+        updateMathLivePreview();
+      }
+
       let composing = false;
       ta.addEventListener('compositionstart', () => {
         composing = true;
       });
       ta.addEventListener('blur', () => {
         composing = false;
+        closeLatexAc();
+      });
+      ta.addEventListener('click', () => {
+        if (!composing) {
+          updateLatexAcForTextarea(ta, block, () => {
+            autoResizeTextarea(ta);
+            updateMathLivePreview();
+            if (state.selBox.active) renderSelectionOverlay();
+            scheduleSave();
+          });
+        }
       });
       ta.addEventListener('compositionend', () => {
         composing = false;
         requestAnimationFrame(() => {
           if (!ta.isConnected) return;
           block.text = ta.value;
+          tryNormalizeChineseMathInput(ta, block);
+          if (block.type === 'math' && block.text.includes('\n')) {
+            block.singleLine = false;
+          }
           if (tryExtractAtAtTrigger(block, ta, idx)) return;
           const newCaret = tryLiveTransform(block, ta);
           if (newCaret !== null) {
@@ -1410,6 +2542,13 @@
           }
           row.classList.toggle('is-empty', block.type === 'p' && !block.text);
           autoResizeTextarea(ta);
+          updateMathLivePreview();
+          updateLatexAcForTextarea(ta, block, () => {
+            autoResizeTextarea(ta);
+            updateMathLivePreview();
+            if (state.selBox.active) renderSelectionOverlay();
+            scheduleSave();
+          });
           scheduleSave();
         });
       });
@@ -1417,9 +2556,22 @@
       ta.addEventListener('input', (e) => {
         block.text = ta.value;
         if (!composing && !e.isComposing) {
-          if (tryExtractAtAtTrigger(block, ta, idx)) return;
+          tryNormalizeChineseMathInput(ta, block);
+        }
+        if (MACRO_DEF_RE.test(block.text)) {
+          state.activeBlockTouchedMacro = true;
+        }
+        if (block.type === 'math' && block.text.includes('\n')) {
+          block.singleLine = false;
+        }
+        if (!composing && !e.isComposing) {
+          if (tryExtractAtAtTrigger(block, ta, idx)) {
+            closeLatexAc();
+            return;
+          }
           const newCaret = tryLiveTransform(block, ta);
           if (newCaret !== null) {
+            closeLatexAc();
             syncActiveBlockInPlace(row, block, idx, ta, newCaret);
             scheduleSave();
             return;
@@ -1427,12 +2579,21 @@
         }
         row.classList.toggle('is-empty', block.type === 'p' && !block.text);
         autoResizeTextarea(ta);
+        updateMathLivePreview();
+        if (!composing && !e.isComposing) {
+          updateLatexAcForTextarea(ta, block, () => {
+            autoResizeTextarea(ta);
+            updateMathLivePreview();
+            if (state.selBox.active) renderSelectionOverlay();
+            scheduleSave();
+          });
+        }
         if (state.selBox.active) renderSelectionOverlay();
         scheduleSave();
       });
 
       ta.addEventListener('paste', (e) => {
-        if (block.type === 'code' || block.type === 'table') return;
+        if (block.type === 'code' || block.type === 'table' || block.type === 'math') return;
         const pasted = e.clipboardData?.getData('text/plain');
         if (!pasted || !pasted.includes('\n')) return;
         e.preventDefault();
@@ -1466,6 +2627,17 @@
       ta.addEventListener('keydown', (e) => {
         if (composing || e.isComposing || e.keyCode === 229) return;
 
+        if (handleLatexAcKeydown(e, ta, block)) {
+          return;
+        }
+
+        if (tryDeleteEmptyDollarPair(e, ta, block)) {
+          row.classList.toggle('is-empty', block.type === 'p' && !block.text);
+          autoResizeTextarea(ta);
+          scheduleSave();
+          return;
+        }
+
         if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
           e.preventDefault();
           applyFormat('bold');
@@ -1474,6 +2646,9 @@
 
         if (e.key === 'Tab') {
           e.preventDefault();
+          if (!e.shiftKey && tryMathBraceTabJump(ta, block)) {
+            return;
+          }
           if (isListBlock(block)) {
             const curIndent = block.indent || 0;
             const nextIndent = e.shiftKey
@@ -1503,7 +2678,7 @@
           return;
         }
 
-        if ((block.type === 'code' || block.type === 'table') && e.key === 'Enter') {
+        if ((block.type === 'code' || block.type === 'table' || block.type === 'math') && e.key === 'Enter') {
           if (e.ctrlKey || e.metaKey) {
             e.preventDefault();
             state.blocks.splice(idx + 1, 0, makeBlock('p'));
@@ -1535,6 +2710,31 @@
             block.text = '';
             scheduleSave();
             activateBlock(idx, 0, true);
+            return;
+          }
+
+          const mathFence = block.type === 'p' && val.match(/^\s*(\$\$|\\\[)\s*$/);
+          if (mathFence) {
+            block.type = 'math';
+            block.delim = mathFence[1] === '\\[' ? '\\[' : '$$';
+            block.singleLine = false;
+            block.text = '';
+            scheduleSave();
+            activateBlock(idx, 0, true);
+            return;
+          }
+
+          const oneLineMath =
+            block.type === 'p' &&
+            (val.match(/^\s*(\$\$)(.+?)\$\$\s*$/) || val.match(/^\s*(\\\[)(.+?)\\\]\s*$/));
+          if (oneLineMath && !oneLineMath[2].includes(oneLineMath[1] === '\\[' ? '\\]' : '$$')) {
+            block.type = 'math';
+            block.delim = oneLineMath[1] === '\\[' ? '\\[' : '$$';
+            block.singleLine = true;
+            block.text = oneLineMath[2].trim();
+            state.blocks.splice(idx + 1, 0, makeBlock('p'));
+            scheduleSave();
+            activateBlock(idx + 1, 0, true);
             return;
           }
 
@@ -1593,7 +2793,7 @@
         }
 
         if (e.key === 'Backspace' && ta.selectionStart === 0 && ta.selectionEnd === 0) {
-          if (block.type === 'code' && block.text) return;
+          if ((block.type === 'code' || block.type === 'math') && block.text) return;
           if (isListBlock(block) && (block.indent || 0) > 0) {
             e.preventDefault();
             block.indent = (block.indent || 0) - 1;
@@ -1605,15 +2805,17 @@
           }
           if (block.type !== 'p') {
             e.preventDefault();
-            const wasCode = block.type === 'code';
+            const wasSpecial = block.type === 'code' || block.type === 'math';
             block.type = 'p';
             delete block.checked;
             delete block.num;
             delete block.lang;
+            delete block.delim;
+            delete block.singleLine;
             delete block.indent;
             renumberOrderedLists();
             scheduleSave();
-            if (wasCode) {
+            if (wasSpecial) {
               activateBlock(idx, 0, true);
             } else {
               syncActiveBlockInPlace(row, block, idx, ta, 0);
@@ -1629,7 +2831,7 @@
               renumberOrderedLists();
               scheduleSave();
               activateBlock(idx - 1, 0, true);
-            } else if (prev.type !== 'code' && prev.type !== 'table') {
+            } else if (prev.type !== 'code' && prev.type !== 'table' && prev.type !== 'math') {
               const joinPos = prev.text.length;
               prev.text += block.text;
               state.blocks.splice(idx, 1);
@@ -1662,7 +2864,21 @@
         }
       });
 
+      ta.addEventListener('keyup', (e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+          updateLatexAcForTextarea(ta, block, () => {
+            autoResizeTextarea(ta);
+            updateMathLivePreview();
+            if (state.selBox.active) renderSelectionOverlay();
+            scheduleSave();
+          });
+        }
+      });
+
       body.appendChild(ta);
+      if (mathPreviewEl) {
+        body.appendChild(mathPreviewEl);
+      }
       requestAnimationFrame(() => {
         autoResizeTextarea(ta);
         if (state.selBox.active) renderSelectionOverlay();
@@ -1670,12 +2886,20 @@
     } else {
       const view = document.createElement('div');
       view.className = 'block-view';
+      const activeMacros = macros || computeMacrosBeforeBlock(idx);
       if (block.type === 'code') {
         view.textContent = block.text || ' ';
+      } else if (block.type === 'math') {
+        view.classList.add('math-block-view');
+        if (block.text.trim()) {
+          view.innerHTML = renderKatexHtml(block.text, true, activeMacros);
+        } else {
+          view.innerHTML = `<span class="block-placeholder">${escapeHtml(t('phMath'))}</span>`;
+        }
       } else if (block.type === 'table') {
-        view.innerHTML = renderTableHtml(block.text);
+        view.innerHTML = renderTableHtml(block.text, activeMacros);
       } else if (block.text) {
-        view.innerHTML = renderInline(block.text);
+        view.innerHTML = renderInline(block.text, activeMacros);
       } else {
         const ph = blockPlaceholder(block, idx);
         view.innerHTML = ph ? `<span class="block-placeholder">${escapeHtml(ph)}</span>` : '&nbsp;';
@@ -1683,6 +2907,8 @@
 
       row.addEventListener('click', (e) => {
         if (e.target instanceof Element && e.target.closest('a')) return;
+        const sel = window.getSelection?.();
+        if (sel && !sel.isCollapsed && sel.toString().length > 0) return;
         e.stopPropagation();
         activateBlock(idx);
       });
@@ -1698,8 +2924,9 @@
     const scrollTop = el.liveEditor.scrollTop;
     el.blocksRoot.innerHTML = '';
     const frag = document.createDocumentFragment();
+    const sharedMacros = createNoteMacros();
     for (let i = 0; i < state.blocks.length; i++) {
-      frag.appendChild(buildBlockElement(state.blocks[i], i));
+      frag.appendChild(buildBlockElement(state.blocks[i], i, sharedMacros));
     }
     el.blocksRoot.appendChild(frag);
     el.liveEditor.scrollTop = scrollTop;
@@ -1892,6 +3119,7 @@
   }
 
   function setSourceMode(toSource) {
+    closeLatexAc();
     const next = Boolean(toSource);
     if (!state.currentName) {
       el.liveEditor.classList.add('hidden');
@@ -2523,11 +3751,72 @@
     applyFormat(btn.dataset.fmt);
   });
 
-  el.sourceEditor.addEventListener('input', scheduleSave);
-  el.sourceEditor.addEventListener('blur', () => void flushSave());
+  if (el.latexAc) {
+    el.latexAc.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+    });
+    el.latexAc.addEventListener('click', (e) => {
+      const itemNode = e.target instanceof Element ? e.target.closest('.latex-ac-item') : null;
+      if (!itemNode) return;
+      e.preventDefault();
+      e.stopPropagation();
+      acceptLatexAcItem(Number(itemNode.dataset.idx) || 0);
+    });
+  }
+
+  el.liveEditor.addEventListener('scroll', () => {
+    if (acState.open) positionLatexAcPopup();
+  });
+  el.sourceEditor.addEventListener('scroll', () => {
+    if (acState.open) positionLatexAcPopup();
+  });
+  window.addEventListener('resize', () => {
+    if (acState.open) positionLatexAcPopup();
+  });
+
+  el.sourceEditor.addEventListener('compositionend', () => {
+    requestAnimationFrame(() => {
+      if (tryNormalizeChineseMathInput(el.sourceEditor, null)) {
+        scheduleSave();
+      }
+      updateLatexAcForTextarea(el.sourceEditor, null, scheduleSave);
+    });
+  });
+  el.sourceEditor.addEventListener('input', (e) => {
+    if (!e.isComposing) {
+      tryNormalizeChineseMathInput(el.sourceEditor, null);
+    }
+    scheduleSave();
+    if (!e.isComposing) {
+      updateLatexAcForTextarea(el.sourceEditor, null, scheduleSave);
+    }
+  });
+  el.sourceEditor.addEventListener('click', () => {
+    updateLatexAcForTextarea(el.sourceEditor, null, scheduleSave);
+  });
+  el.sourceEditor.addEventListener('blur', () => {
+    closeLatexAc();
+    void flushSave();
+  });
+  el.sourceEditor.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') {
+      updateLatexAcForTextarea(el.sourceEditor, null, scheduleSave);
+    }
+  });
   el.sourceEditor.addEventListener('keydown', (e) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (handleLatexAcKeydown(e, el.sourceEditor, null)) {
+      return;
+    }
+    if (tryDeleteEmptyDollarPair(e, el.sourceEditor, null)) {
+      scheduleSave();
+      return;
+    }
     if (e.key === 'Tab') {
       e.preventDefault();
+      if (!e.shiftKey && tryMathBraceTabJump(el.sourceEditor, null)) {
+        return;
+      }
       const s = el.sourceEditor.selectionStart;
       const end = el.sourceEditor.selectionEnd;
       el.sourceEditor.value =
@@ -2630,7 +3919,9 @@
       openDrawer();
       showNewNoteBox();
     } else if (e.key === 'Escape') {
-      if (!el.settingsBackdrop.classList.contains('hidden')) {
+      if (acState.open) {
+        closeLatexAc();
+      } else if (!el.settingsBackdrop.classList.contains('hidden')) {
         closeSettings(true);
       } else if (el.drawer.classList.contains('open')) {
         closeDrawer();
@@ -2665,6 +3956,12 @@
   async function init() {
     applyI18nToDom();
     setupSelectionDragEvents();
+
+    void ensureKatexLoaded().then((loaded) => {
+      if (loaded && !state.sourceMode && state.currentName) {
+        renderLiveBlocks();
+      }
+    });
 
     setInterval(() => {
       void pollExternalChanges();

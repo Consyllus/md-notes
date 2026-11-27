@@ -564,6 +564,180 @@ html, body {
   overflow-x: auto;
 }
 
+/* ---------- LaTeX Math (KaTeX Inline & Display Blocks) ---------- */
+
+.block-math {
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  margin: 6px 0;
+  border-radius: 7px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.block-math > .block-body {
+  width: 100%;
+}
+
+.block-math:not(.is-active):hover {
+  background: var(--hover-bg);
+}
+
+.block-math.is-active {
+  padding: 8px 12px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 48%, var(--border-col));
+  background: color-mix(in srgb, var(--fg) 4%, var(--bg));
+}
+
+.math-lang-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  color: var(--fg-muted);
+  user-select: none;
+}
+
+.math-lang-tag {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.block-math .block-input {
+  width: 100%;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.math-live-preview {
+  width: 100%;
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+  border-top: 1px dashed var(--border-col);
+  border-radius: 0 0 5px 5px;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.math-block-view {
+  display: block;
+  width: 100%;
+  white-space: normal;
+  text-align: center;
+  padding: 6px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: pointer;
+}
+
+.block-view .katex,
+.math-live-preview .katex {
+  font-size: 1.06em;
+  color: inherit;
+}
+
+.block-view .katex-display,
+.math-live-preview .katex-display {
+  display: block;
+  width: 100%;
+  margin: 0.25em 0;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 2px 0;
+}
+
+.block-view .katex-display > .katex,
+.math-live-preview .katex-display > .katex {
+  display: block;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.math-inline-display {
+  display: block;
+  width: 100%;
+  text-align: center;
+  overflow-x: auto;
+  overflow-y: hidden;
+  margin: 4px 0;
+}
+
+.math-fallback {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+  color: var(--accent);
+}
+
+/* ---------- 0ms LaTeX Command Autocomplete Popup ---------- */
+
+.latex-ac {
+  position: absolute;
+  z-index: 60;
+  max-height: 224px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border-col);
+  background: var(--surface);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.16);
+}
+
+.latex-ac-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 28px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.latex-ac-item:hover {
+  background: var(--hover-bg);
+}
+
+.latex-ac-item.is-selected {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.latex-ac-cmd {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.latex-ac-prev {
+  flex-shrink: 0;
+  max-width: 118px;
+  overflow: hidden;
+  font-size: 12px;
+  color: var(--fg-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.latex-ac-item.is-selected .latex-ac-prev {
+  color: var(--fg);
+}
+
+.latex-ac-prev .katex {
+  font-size: 0.96em;
+}
+
 .block-table {
   flex-direction: column;
   margin: 8px 0;

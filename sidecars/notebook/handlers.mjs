@@ -323,7 +323,7 @@ function extractPreview(content, effectiveLang = 'en') {
   const lines = String(content || '')
     .split(/\r?\n/)
     .map((l) => l.trim())
-    .filter((l) => l && !/^---+$/.test(l));
+    .filter((l) => l && !/^---+$/.test(l) && !/^(\$\$|\\\[|\\\])$/.test(l));
   if (!lines.length) return m.emptyNote;
   const clean = lines
     .slice(0, 2)
@@ -333,6 +333,39 @@ function extractPreview(content, effectiveLang = 'en') {
     .replace(/\s+/g, ' ')
     .trim();
   return clean.slice(0, 72) || m.emptyNote;
+}
+
+const KATEX_ASSET_ALLOW_RE =
+  /^(katex\.min\.css|katex\.min\.js|mhchem\.min\.js|copy-tex\.min\.js|completions\.js)$/;
+
+function serveHotKatexAsset(assetName) {
+  const rel = String(assetName || '').trim().replace(/\\/g, '/');
+  if (!KATEX_ASSET_ALLOW_RE.test(rel)) {
+    return {
+      status: 404,
+      contentType: 'text/plain; charset=utf-8',
+      body: 'Not found',
+    };
+  }
+  const katexRoot = resolve(__dirname, 'vendor', 'katex');
+  const fullPath = resolve(katexRoot, rel);
+  const rootPrefix = katexRoot.endsWith(sep) ? katexRoot : katexRoot + sep;
+  if (!fullPath.startsWith(rootPrefix) || !existsSync(fullPath)) {
+    return {
+      status: 404,
+      contentType: 'text/plain; charset=utf-8',
+      body: 'Asset missing',
+    };
+  }
+  const contentType = rel.endsWith('.css')
+    ? 'text/css; charset=utf-8'
+    : 'application/javascript; charset=utf-8';
+  return {
+    status: 200,
+    contentType,
+    headers: { 'Cache-Control': 'no-cache' },
+    body: readFileSync(fullPath, 'utf8'),
+  };
 }
 
 function listNotesInDir(activeDir, effectiveLang = 'en') {
@@ -457,6 +490,9 @@ function defaultNoteName(effectiveLang = 'en') {
 
 export const handlers = {
   getConfig(data = {}) {
+    if (data.katexAsset) {
+      return serveHotKatexAsset(data.katexAsset);
+    }
     return resolveStorageInfo(data.workspaceUri, data.clientLocale);
   },
 
