@@ -1,8 +1,8 @@
 {
   "name": "md-notes",
   "displayName": "Notebook",
-  "version": "1.0.0",
-  "description": "Minimalist side-pane (sidebar) notebook and scratchpad plugin for Google Antigravity — plain-text & live Markdown editing, nested lists, @@ context selection, and Agent access locks. (极简右侧笔记本 / 记笔记便签侧边栏)",
+  "version": "1.1.0",
+  "description": "Minimalist side-pane (sidebar) notebook and scratchpad plugin for Google Antigravity — plain-text & live Markdown editing, offline LaTeX math & autocomplete, nested lists, @@ context selection, and Agent access locks. (极简右侧笔记本 / 记笔记便签侧边栏)",
   "author": {
     "name": "FalsenJing",
     "url": "https://consyllus.com"
