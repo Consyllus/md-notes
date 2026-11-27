@@ -43,12 +43,8 @@
       emptyDirPrefix: (dir) => `保存位置：${dir}`,
       liveEditorAria: '实时预览编辑区',
       selBoxAria: '@@ 上下文框选区域',
-      selDragTitle: '按住向上或向下拖拽调整框选范围，松手固定',
+      selDragTitle: '按住上下拖拽调整框选范围',
       selCloseTitle: '删除选框',
-      selDragging: (n) => `⇕ 向上拖拽框选（${n} 块），松手固定`,
-      selModeB: (n) => `📌 方式B · 常驻生效中（${n} 块）`,
-      selModeAConsumed: '✓ 方式A · 已引用（拖拽可重激活）',
-      selModeAReady: (n) => `📎 方式A · 待随下条消息引用（${n} 块）`,
       sourcePlaceholder: '输入 Markdown 源码…',
       phH1: '一级标题',
       phH2: '二级标题',
@@ -134,6 +130,10 @@
       toastDeleted: '已删除笔记',
       toastSettingsSaved: '设置已保存',
       toastSaved: '已保存',
+      convLinkTitle: (shortId) => `点击切换至宿主对话 (${shortId}…)`,
+      fileLinkTitle: '点击打开关联文件',
+      toastHostConvUnsupported: '当前环境不支持直接跳转宿主对话窗口',
+      toastHostFileUnsupported: '当前环境不支持直接打开本地文件视图',
     },
     en: {
       appTitle: 'Notebook',
@@ -170,13 +170,8 @@
       emptyDirPrefix: (dir) => `Location: ${dir}`,
       liveEditorAria: 'Live preview editor',
       selBoxAria: '@@ context selection area',
-      selDragTitle: 'Drag up or down to adjust selection range, release to pin',
+      selDragTitle: 'Drag up or down to adjust selection range',
       selCloseTitle: 'Remove selection',
-      selDragging: (n) => `⇕ Drag up to select (${n} ${n === 1 ? 'block' : 'blocks'}), release to pin`,
-      selModeB: (n) => `📌 Mode B · Pinned (${n} ${n === 1 ? 'block' : 'blocks'})`,
-      selModeAConsumed: '✓ Mode A · Referenced (drag to reactivate)',
-      selModeAReady: (n) =>
-        `📎 Mode A · Ready for next message (${n} ${n === 1 ? 'block' : 'blocks'})`,
       sourcePlaceholder: 'Write Markdown source…',
       phH1: 'Heading 1',
       phH2: 'Heading 2',
@@ -265,6 +260,10 @@
       toastDeleted: 'Note deleted',
       toastSettingsSaved: 'Settings saved',
       toastSaved: 'Saved',
+      convLinkTitle: (shortId) => `Switch to conversation (${shortId}…)`,
+      fileLinkTitle: 'Open linked file',
+      toastHostConvUnsupported: 'Conversation jump requires the Antigravity host app',
+      toastHostFileUnsupported: 'File preview requires the Antigravity host app',
     },
   };
 
@@ -295,7 +294,6 @@
     blocksRoot: $('blocks-root'),
     selectionBox: $('selection-box'),
     selDragBar: $('sel-drag-bar'),
-    selBadge: $('sel-badge'),
     btnSelClose: $('btn-sel-close'),
     sourceEditor: $('source-editor'),
     btnLockBadge: $('btn-lock-badge'),
@@ -592,17 +590,6 @@
     el.selectionBox.classList.toggle('is-unpinned', Boolean(sb.unpinned));
     el.selectionBox.classList.toggle('is-dragging', Boolean(sb.dragging));
     el.selectionBox.classList.toggle('is-consumed', isConsumed);
-
-    const lineCount = safeAnchor - safeTop + 1;
-    if (sb.dragging || sb.unpinned) {
-      el.selBadge.textContent = t('selDragging', lineCount);
-    } else if (isModeB) {
-      el.selBadge.textContent = t('selModeB', lineCount);
-    } else if (isConsumed) {
-      el.selBadge.textContent = t('selModeAConsumed');
-    } else {
-      el.selBadge.textContent = t('selModeAReady', lineCount);
-    }
   }
 
   async function syncSelectionToBackend({ resetDelivery = false, preserveConsumed = false } = {}) {
@@ -1374,10 +1361,44 @@
     return out.replace(/\u0000ESCAPED_DOLLAR\u0000/g, '$');
   }
 
+  function formatInlineEmphasis(escaped) {
+    let out = escaped;
+    out = out.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
+    out = out.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    out = out.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+    out = out.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    out = out.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    return out;
+  }
+
+  function buildMarkdownAnchorHtml(rawLabel, rawHref) {
+    const href = String(rawHref || '').trim();
+    const labelHtml = formatInlineEmphasis(escapeHtml(rawLabel));
+
+    const convMatch = href.match(/^conversation:\/\/([A-Za-z0-9_-]+)\/?(?:#[^\s]*)?$/i);
+    if (convMatch) {
+      const convId = convMatch[1];
+      const tip = escapeHtml(t('convLinkTitle', convId.slice(0, 8)));
+      return `<a href="${escapeHtml(href)}" class="md-conv-link" data-conv-id="${escapeHtml(convId)}" title="${tip}">${labelHtml}</a>`;
+    }
+
+    if (/^file:\/\/\/?[^\s<>"]+$/i.test(href)) {
+      const tip = escapeHtml(t('fileLinkTitle'));
+      return `<a href="${escapeHtml(href)}" class="md-file-link" data-file-uri="${escapeHtml(href)}" title="${tip}">${labelHtml}</a>`;
+    }
+
+    if (/^(?:https?:\/\/|mailto:)[^\s<>"]+$/i.test(href)) {
+      return `<a href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer">${labelHtml}</a>`;
+    }
+
+    return null;
+  }
+
   function renderInline(text, macros) {
     const raw = String(text ?? '');
     const codeTokens = [];
     const mathTokens = [];
+    const linkTokens = [];
 
     // 1. Protect inline code spans first so `$HOME` / `$1` inside backticks stay literal
     let s = raw.replace(/`([^`]+)`/g, (_, inner) => {
@@ -1389,21 +1410,20 @@
     // 2. Extract and render LaTeX math before HTML escaping & Markdown emphasis (* / _)
     s = extractInlineMathTokens(s, mathTokens, macros);
 
-    // 3. Escape remaining plain-text HTML
-    s = escapeHtml(s);
+    // 3. Extract Markdown links (https, mailto, conversation://, file://) before emphasis escaping
+    s = s.replace(/\[([^\]]+)\]\(((?:[^\s()<>"]|\([^\s()<>"]*\))+)\)/g, (full, label, href) => {
+      const anchorHtml = buildMarkdownAnchorHtml(label, href);
+      if (!anchorHtml) return full;
+      const idx = linkTokens.length;
+      linkTokens.push(anchorHtml);
+      return `\u0000LINK${idx}\u0000`;
+    });
 
-    // 4. Standard inline Markdown formatting
-    s = s.replace(
-      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
-      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
-    );
-    s = s.replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>');
-    s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-    s = s.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-    s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-    s = s.replace(/~~([^~]+)~~/g, '<del>$1</del>');
+    // 4. Escape remaining plain-text HTML and apply emphasis
+    s = formatInlineEmphasis(escapeHtml(s));
 
-    // 5. Restore rendered math & code tokens
+    // 5. Restore links first (so math/code inside link labels also restore), then math & code
+    s = s.replace(/\u0000LINK(\d+)\u0000/g, (_, idx) => linkTokens[Number(idx)] || '');
     s = s.replace(/\u0000MATH(\d+)\u0000/g, (_, idx) => mathTokens[Number(idx)] || '');
     s = s.replace(/\u0000CODE(\d+)\u0000/g, (_, idx) => codeTokens[Number(idx)] || '');
     return s;
@@ -2394,6 +2414,20 @@
     }
   }
 
+  let lastPointerDown = null;
+
+  function hasNonCollapsedSelection() {
+    const sel = window.getSelection?.();
+    return Boolean(sel && !sel.isCollapsed);
+  }
+
+  function isDragGesture(e) {
+    if (!lastPointerDown) return false;
+    const dx = e.clientX - lastPointerDown.x;
+    const dy = e.clientY - lastPointerDown.y;
+    return dx * dx + dy * dy > 16;
+  }
+
   function buildBlockElement(block, idx, macros = null) {
     const isActive = idx === state.activeBlockIndex;
     const row = document.createElement('div');
@@ -2406,6 +2440,7 @@
       row.appendChild(hr);
       row.tabIndex = 0;
       row.addEventListener('click', (e) => {
+        if (hasNonCollapsedSelection() || isDragGesture(e)) return;
         e.stopPropagation();
         activateBlock(idx);
       });
@@ -2907,8 +2942,7 @@
 
       row.addEventListener('click', (e) => {
         if (e.target instanceof Element && e.target.closest('a')) return;
-        const sel = window.getSelection?.();
-        if (sel && !sel.isCollapsed && sel.toString().length > 0) return;
+        if (hasNonCollapsedSelection() || isDragGesture(e)) return;
         e.stopPropagation();
         activateBlock(idx);
       });
@@ -3670,8 +3704,97 @@
     reportBusyLock(true);
   });
 
+  function tryMatchLocalNoteFromFileUri(fileUri) {
+    if (!state.storage?.activeDir || !Array.isArray(state.notes) || !state.notes.length) {
+      return null;
+    }
+    try {
+      const cleanUri = String(fileUri || '').split('#')[0];
+      const u = new URL(cleanUri);
+      if (u.protocol !== 'file:') return null;
+      let decoded = decodeURIComponent(u.pathname || '');
+      if (/^\/[A-Za-z]:/.test(decoded)) decoded = decoded.slice(1);
+      const normTarget = decoded.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+      const normActiveDir = String(state.storage.activeDir)
+        .replace(/\\/g, '/')
+        .replace(/\/+$/, '')
+        .toLowerCase();
+      if (!normTarget.startsWith(`${normActiveDir}/`)) return null;
+      const rest = normTarget.slice(normActiveDir.length + 1);
+      if (!rest || rest.includes('/')) return null;
+      return state.notes.find((n) => n.name.toLowerCase() === rest) || null;
+    } catch {
+      return null;
+    }
+  }
+
+  el.blocksRoot.addEventListener('click', (e) => {
+    const anchor = e.target instanceof Element ? e.target.closest('a') : null;
+    if (!anchor) return;
+
+    if (hasNonCollapsedSelection() || isDragGesture(e)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+
+    const convId = anchor.dataset.convId;
+    if (convId) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (window.sidecar?.ui?.toggleConversation) {
+        Promise.resolve(window.sidecar.ui.toggleConversation(convId)).catch(() => {});
+      } else {
+        showToast(t('toastHostConvUnsupported'));
+      }
+      return;
+    }
+
+    const fileUri = anchor.dataset.fileUri;
+    if (fileUri) {
+      e.preventDefault();
+      e.stopPropagation();
+      const localNote = tryMatchLocalNoteFromFileUri(fileUri);
+      if (localNote) {
+        void openNote(localNote.name);
+        return;
+      }
+      const cleanUri = fileUri.split('#')[0];
+      if (window.sidecar?.ui?.toggleAuxPane) {
+        Promise.resolve(
+          window.sidecar.ui.toggleAuxPane({ tabType: 'fileView', uri: cleanUri })
+        ).catch(() => {});
+      } else {
+        showToast(t('toastHostFileUnsupported'));
+      }
+    }
+  });
+
+  document.addEventListener(
+    'pointerdown',
+    (e) => {
+      lastPointerDown =
+        e.button === 0 ? { x: e.clientX, y: e.clientY, target: e.target } : null;
+    },
+    true
+  );
+
   el.liveEditor.addEventListener('click', (e) => {
     if (e.target !== el.liveEditor && e.target !== el.blocksRoot) return;
+    if (hasNonCollapsedSelection() || isDragGesture(e)) return;
+    if (
+      lastPointerDown &&
+      lastPointerDown.target !== el.liveEditor &&
+      lastPointerDown.target !== el.blocksRoot
+    ) {
+      return;
+    }
+    if (
+      el.blocksRoot.lastElementChild &&
+      e.clientY < el.blocksRoot.lastElementChild.getBoundingClientRect().bottom
+    ) {
+      return;
+    }
     if (!state.blocks.length) {
       state.blocks.push(makeBlock('p'));
       activateBlock(0, 0, true);
@@ -3689,6 +3812,7 @@
 
   document.addEventListener('click', (e) => {
     if (state.sourceMode || state.activeBlockIndex === -1) return;
+    if (hasNonCollapsedSelection() || isDragGesture(e)) return;
     const target = e.target instanceof Element ? e.target : null;
     if (!target) return;
     if (!target.closest('#live-editor') && !target.closest('#fmt-bar')) {

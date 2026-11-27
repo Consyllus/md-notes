@@ -278,42 +278,53 @@ html, body {
 
 .sel-drag-bar {
   position: absolute;
-  top: -11px;
-  left: 8px;
-  right: 30px;
-  height: 20px;
+  top: -9px;
+  left: 0;
+  right: 0;
+  height: 16px;
   display: flex;
   align-items: center;
+  justify-content: center;
   pointer-events: auto;
   cursor: ns-resize;
   user-select: none;
 }
 
-.sel-badge {
+.sel-handle {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 1px 8px;
+  justify-content: center;
+  width: 32px;
+  height: 11px;
   border-radius: 999px;
-  font-size: 10.5px;
-  font-weight: 600;
   background: var(--bg);
   color: var(--sel-blue-text);
   border: 1px solid var(--sel-blue-border);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 100%;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
 }
 
-.selection-box.is-consumed .sel-badge {
+.sel-drag-bar:hover .sel-handle,
+.selection-box.is-dragging .sel-handle {
+  background: color-mix(in srgb, var(--sel-blue-text) 10%, var(--bg));
+  border-color: var(--sel-blue-text);
+  color: var(--sel-blue-text);
+  transform: scaleX(1.08);
+}
+
+.selection-box.is-consumed .sel-handle {
   color: var(--sel-gray-text);
   border-color: var(--sel-gray-border);
 }
 
+.selection-box.is-consumed .sel-drag-bar:hover .sel-handle {
+  color: var(--sel-blue-text);
+  border-color: var(--sel-blue-border);
+}
+
 .sel-close-btn {
   position: absolute;
+  z-index: 2;
   top: -10px;
   right: -8px;
   width: 20px;
@@ -786,6 +797,19 @@ html, body {
   color: var(--accent);
   text-decoration: underline;
   text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.block-view a:hover {
+  opacity: 0.82;
+}
+
+.block-view a.md-conv-link::after {
+  content: " ↗";
+  font-size: 0.88em;
+  text-decoration: none;
+  display: inline-block;
+  opacity: 0.8;
 }
 
 .block-placeholder {
