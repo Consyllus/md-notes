@@ -1016,6 +1016,40 @@ html, body {
   margin-top: 3px;
 }
 
+.lang-seg {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--border-col);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.lang-seg-btn {
+  height: 26px;
+  border: none;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--fg-muted);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.lang-seg-btn:hover {
+  color: var(--fg);
+  background: var(--hover-bg);
+}
+
+.lang-seg-btn.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .perm-card {
   border: 1px solid var(--border-col);
   border-radius: 8px;

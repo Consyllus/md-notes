@@ -1,8 +1,8 @@
 {
   "name": "md-notes",
-  "displayName": "Markdown 笔记本",
+  "displayName": "Markdown Notes",
   "version": "1.0.0",
-  "description": "极简右侧 Markdown 笔记本：支持实时分块预览与多级列表、@@ 框选上下文精准投喂、Agent 读写权限锁，以及跟随工作区或自定义目录存储。",
+  "description": "Minimalist Aux Pane Markdown notebook with live block preview, nested lists, @@ context selection, and Agent access locks. (极简右侧 Markdown 笔记本)",
   "author": {
     "name": "FalsenJing",
     "url": "https://consyllus.com"
@@ -11,8 +11,8 @@
   "repository": "https://github.com/Consyllus/md-notes",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
-    "打开 Markdown 笔记本侧边栏",
-    "把刚才讲的核心要点整理追加到今天的笔记里",
-    "修改 Markdown 笔记本的存储目录"
+    "Open the Markdown Notes side pane",
+    "Save the key takeaways from this chat into today's note",
+    "Create a new study note in Markdown Notes"
   ]
 }

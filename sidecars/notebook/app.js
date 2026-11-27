@@ -3,6 +3,276 @@
 
   const $ = (id) => document.getElementById(id);
 
+  // -------------------------------------------------------------------------
+  // Internationalization (zh-CN & en + Auto System Detection)
+  // -------------------------------------------------------------------------
+
+  const I18N = {
+    'zh-CN': {
+      appTitle: 'Markdown 笔记本',
+      untitledNote: '未命名笔记',
+      notebookTitleFallback: '笔记本',
+      drawerTitleAttr: '笔记列表',
+      renameNoteTitleAttr: '点击重命名当前笔记',
+      renameNoteAria: '重命名笔记',
+      newNoteTitleAttr: '新建笔记 (Ctrl+N)',
+      modeBtnSource: '源码',
+      modeBtnLive: '实时',
+      modeBtnTitleAttr: '切换实时预览 / Markdown 源码 (Ctrl+E)',
+      settingsBtnTitleAttr: '设置与权限锁',
+      fmtH1Title: '一级标题 (# )',
+      fmtH2Title: '二级标题 (## )',
+      fmtBoldTitle: '加粗 (Ctrl+B)',
+      fmtItalicTitle: '斜体',
+      fmtCodeTitle: '行内代码',
+      fmtQuoteTitle: '引用 (> )',
+      fmtUlLabel: '• 列表',
+      fmtUlTitle: '无序列表 (- ，Tab / Shift+Tab 调整层级)',
+      fmtOlLabel: '1. 列表',
+      fmtOlTitle: '有序列表 (1. ，Tab / Shift+Tab 调整层级)',
+      fmtTodoLabel: '☐ 待办',
+      fmtTodoTitle: '待办 (- [ ] ，Tab / Shift+Tab 调整层级)',
+      statusReady: '就绪',
+      statusSaving: '保存中…',
+      statusUnsaved: '未保存',
+      statusSaved: '已保存',
+      boldFallback: '加粗文本',
+      italicFallback: '斜体文本',
+      emptyTitle: '还没有笔记',
+      emptyCreateBtn: '新建第一篇笔记',
+      emptyDirPrefix: (dir) => `保存位置：${dir}`,
+      liveEditorAria: '实时预览编辑区',
+      selBoxAria: '@@ 上下文框选区域',
+      selDragTitle: '按住向上或向下拖拽调整框选范围，松手固定',
+      selCloseTitle: '删除选框',
+      selDragging: (n) => `⇕ 向上拖拽框选（${n} 块），松手固定`,
+      selModeB: (n) => `📌 方式B · 常驻生效中（${n} 块）`,
+      selModeAConsumed: '✓ 方式A · 已引用（拖拽可重激活）',
+      selModeAReady: (n) => `📎 方式A · 待随下条消息引用（${n} 块）`,
+      sourcePlaceholder: '输入 Markdown 源码…',
+      phH1: '一级标题',
+      phH2: '二级标题',
+      phH3: '三级标题',
+      phH4: '四级标题',
+      phQuote: '引用内容…',
+      phList: '列表项…',
+      phTodo: '待办事项…',
+      phCode: '输入代码…',
+      phFirstLine: '输入 ## + 空格 建标题，输入 @@ 呼出上下文框选…',
+      codeLeaveHint: 'Ctrl+Enter 离开代码块',
+      lockBadgeTitle: '点击修改权限与 @@ 模式设置',
+      quoteBadgeTitle: '当前 @@ 框选模式（点击切换）',
+      dirIndicatorTitle: '点击打开存储设置',
+      badgeNoAccess: '🔒 禁访',
+      badgeReadOnly: '👁 只读',
+      badgeReadWrite: '🔓 读写',
+      badgeModeA: '@@ 方式A·单轮',
+      badgeModeB: '@@ 方式B·常驻',
+      tagWorkspace: '工作区',
+      tagCustom: '自定义',
+      wordCount: (n) => `${n} 字`,
+      drawerHeadTitle: '全部笔记',
+      drawerNewBtn: '+ 新建',
+      closeAria: '关闭',
+      searchPlaceholder: '搜索笔记标题或内容…',
+      newNamePlaceholder: '输入笔记名称（无需 .md）',
+      defaultNewNoteName: (ymd) => `${ymd} 笔记`,
+      btnCreate: '创建',
+      btnCancel: '取消',
+      noSearchMatch: '没有匹配的笔记',
+      emptyNoteList: '暂无笔记，点上方「+ 新建」开始记录',
+      btnDelete: '删除',
+      btnConfirmDelete: '确认删除',
+      emptyNotePreview: '空笔记',
+      todayTime: (hm) => `今天 ${hm}`,
+      drawerDirBtnTitle: '更改存储目录',
+      settingsTitle: '笔记本设置',
+      secLang: '界面语言',
+      secQuoteMode: '@@ 框选上下文模式（二选一互斥）',
+      quoteATitle: '方式 A · 单轮文档索引引用（默认）',
+      quoteADesc:
+        '给宿主发送文档位置与行号索引；初始为蓝色半透明框，在聊天窗口发送一轮消息后自动变灰失效。',
+      quoteBTitle: '方式 B · 常驻纯片段直投',
+      quoteBDesc:
+        '仅直接注入框选区域的纯文本（不含文档其余内容与路径），选框一直保持蓝色常驻生效，直至点右上角 ✕ 删除。',
+      secAgentPerm: 'Agent 访问权限锁（PreToolUse 引擎拦截）',
+      permReadTitle: '允许 Agent 读取笔记',
+      permReadDesc: '关闭后，宿主引擎将拒绝聊天窗口读取或检索笔记目录（不影响方式 B 的框选直投）。',
+      permWriteTitle: '允许 Agent 修改笔记',
+      permWriteDesc:
+        '关闭后禁止 Agent 修改笔记；开启时若光标在笔记本内且未保存也会自动临时锁写，光标离开即放行。',
+      secStorage: '笔记存储位置',
+      modeWsTitle: '跟随当前工作区（默认）',
+      modeWsDesc: '切换项目时自动保存到当前工作区目录中。',
+      wsSubdirLabel: '工作区子目录（留空则直接存在根目录）',
+      btnPresetRoot: '根目录',
+      wsResolvedPath: (p) => `当前解析路径：${p}`,
+      wsFallbackPath: (p) => `未检测到打开的工作区，将回退至：${p}`,
+      modeCustomTitle: '自定义存储目录',
+      modeCustomDesc: '固定将所有笔记保存在你指定的本地文件夹（不存在时会自动创建）。',
+      customDirPlaceholder: '例如 C:\\MyNotes 或 D:\\Study\\Notes',
+      btnBrowse: '浏览',
+      btnBrowseUp: '↑ 上级',
+      selectDrive: '选择磁盘',
+      btnBrowseSelect: '选定此目录',
+      noSubfolders: '此目录下没有子文件夹',
+      btnSaveSettings: '保存设置',
+      reqFailed: (s) => `请求失败 (${s})`,
+      saveReqFailed: (s) => `保存失败 (${s})`,
+      toastSpawnSel: '已生成 @@ 选框：向上拖拽框选范围，松手固定',
+      toastPinnedModeB: '@@ 常驻上下文已固定',
+      toastPinnedModeA: '@@ 单轮引用已固定（发消息后自动变灰）',
+      toastClearedSel: '已删除 @@ 选框',
+      toastNoteRemovedExt: '外部已移除当前笔记，已刷新',
+      toastSyncedExt: '已同步聊天窗口修改',
+      toastSaveErr: (m) => `保存失败：${m}`,
+      toastCreated: (title) => `已新建：${title}`,
+      toastRenamed: '已重命名',
+      toastDeleted: '已删除笔记',
+      toastSettingsSaved: '设置已保存',
+      toastSaved: '已保存',
+    },
+    en: {
+      appTitle: 'Markdown Notes',
+      untitledNote: 'Untitled Note',
+      notebookTitleFallback: 'Notes',
+      drawerTitleAttr: 'Notes list',
+      renameNoteTitleAttr: 'Click to rename current note',
+      renameNoteAria: 'Rename note',
+      newNoteTitleAttr: 'New note (Ctrl+N)',
+      modeBtnSource: 'Source',
+      modeBtnLive: 'Live',
+      modeBtnTitleAttr: 'Toggle Live Preview / Markdown Source (Ctrl+E)',
+      settingsBtnTitleAttr: 'Settings & Permissions',
+      fmtH1Title: 'Heading 1 (# )',
+      fmtH2Title: 'Heading 2 (## )',
+      fmtBoldTitle: 'Bold (Ctrl+B)',
+      fmtItalicTitle: 'Italic',
+      fmtCodeTitle: 'Inline code',
+      fmtQuoteTitle: 'Blockquote (> )',
+      fmtUlLabel: '• List',
+      fmtUlTitle: 'Bullet list (- , Tab / Shift+Tab to indent)',
+      fmtOlLabel: '1. List',
+      fmtOlTitle: 'Numbered list (1. , Tab / Shift+Tab to indent)',
+      fmtTodoLabel: '☐ Todo',
+      fmtTodoTitle: 'Task list (- [ ] , Tab / Shift+Tab to indent)',
+      statusReady: 'Ready',
+      statusSaving: 'Saving…',
+      statusUnsaved: 'Unsaved',
+      statusSaved: 'Saved',
+      boldFallback: 'bold text',
+      italicFallback: 'italic text',
+      emptyTitle: 'No notes yet',
+      emptyCreateBtn: 'Create First Note',
+      emptyDirPrefix: (dir) => `Location: ${dir}`,
+      liveEditorAria: 'Live preview editor',
+      selBoxAria: '@@ context selection area',
+      selDragTitle: 'Drag up or down to adjust selection range, release to pin',
+      selCloseTitle: 'Remove selection',
+      selDragging: (n) => `⇕ Drag up to select (${n} ${n === 1 ? 'block' : 'blocks'}), release to pin`,
+      selModeB: (n) => `📌 Mode B · Pinned (${n} ${n === 1 ? 'block' : 'blocks'})`,
+      selModeAConsumed: '✓ Mode A · Referenced (drag to reactivate)',
+      selModeAReady: (n) =>
+        `📎 Mode A · Ready for next message (${n} ${n === 1 ? 'block' : 'blocks'})`,
+      sourcePlaceholder: 'Write Markdown source…',
+      phH1: 'Heading 1',
+      phH2: 'Heading 2',
+      phH3: 'Heading 3',
+      phH4: 'Heading 4',
+      phQuote: 'Quote…',
+      phList: 'List item…',
+      phTodo: 'To-do…',
+      phCode: 'Enter code…',
+      phFirstLine: 'Type ## + Space for heading, or @@ to select context…',
+      codeLeaveHint: 'Ctrl+Enter to leave code block',
+      lockBadgeTitle: 'Click to configure permissions & @@ mode',
+      quoteBadgeTitle: 'Current @@ selection mode (click to change)',
+      dirIndicatorTitle: 'Click to open storage settings',
+      badgeNoAccess: '🔒 Locked',
+      badgeReadOnly: '👁 Read-only',
+      badgeReadWrite: '🔓 R/W',
+      badgeModeA: '@@ Mode A·1-Turn',
+      badgeModeB: '@@ Mode B·Pinned',
+      tagWorkspace: 'Workspace',
+      tagCustom: 'Custom',
+      wordCount: (n) => `${n} chars`,
+      drawerHeadTitle: 'All Notes',
+      drawerNewBtn: '+ New',
+      closeAria: 'Close',
+      searchPlaceholder: 'Search title or content…',
+      newNamePlaceholder: 'Note name (without .md)',
+      defaultNewNoteName: (ymd) => `${ymd} Notes`,
+      btnCreate: 'Create',
+      btnCancel: 'Cancel',
+      noSearchMatch: 'No matching notes',
+      emptyNoteList: 'No notes yet — click "+ New" above to start',
+      btnDelete: 'Delete',
+      btnConfirmDelete: 'Confirm',
+      emptyNotePreview: 'Empty note',
+      todayTime: (hm) => `Today ${hm}`,
+      drawerDirBtnTitle: 'Change storage directory',
+      settingsTitle: 'Notebook Settings',
+      secLang: 'Language',
+      secQuoteMode: '@@ Context Selection Mode',
+      quoteATitle: 'Mode A · Single-Turn Line Reference (Default)',
+      quoteADesc:
+        'Sends file URI and line numbers for one chat turn; the blue box automatically turns gray after sending a message.',
+      quoteBTitle: 'Mode B · Persistent Snippet Injection',
+      quoteBDesc:
+        'Injects only the selected plain text (without file path or outside content); stays active across turns until closed with ✕.',
+      secAgentPerm: 'Agent Access Permissions (PreToolUse Guard)',
+      permReadTitle: 'Allow Agent to Read Notes',
+      permReadDesc:
+        'When off, blocks the Agent from reading or searching your notes directory (Mode B snippet injection still works).',
+      permWriteTitle: 'Allow Agent to Edit Notes',
+      permWriteDesc:
+        'When off, blocks Agent edits; when on, writes are also temporarily paused while you have unsaved edits focused.',
+      secStorage: 'Storage Location',
+      modeWsTitle: 'Follow Current Workspace (Default)',
+      modeWsDesc:
+        'Automatically stores notes inside the active workspace folder when switching projects.',
+      wsSubdirLabel: 'Workspace subdirectory (leave blank for workspace root)',
+      btnPresetRoot: 'Root',
+      wsResolvedPath: (p) => `Resolved path: ${p}`,
+      wsFallbackPath: (p) => `No active workspace detected; falling back to: ${p}`,
+      modeCustomTitle: 'Custom Directory',
+      modeCustomDesc:
+        'Stores all notes in a fixed local folder of your choice (created automatically if missing).',
+      customDirPlaceholder: 'e.g. C:\\MyNotes or ~/Documents/Notes',
+      btnBrowse: 'Browse',
+      btnBrowseUp: '↑ Up',
+      selectDrive: 'Select Drive',
+      btnBrowseSelect: 'Select Folder',
+      noSubfolders: 'No subfolders in this directory',
+      btnSaveSettings: 'Save Settings',
+      reqFailed: (s) => `Request failed (${s})`,
+      saveReqFailed: (s) => `Save failed (${s})`,
+      toastSpawnSel: '@@ selection created: drag up to adjust range, release to pin',
+      toastPinnedModeB: '@@ persistent snippet pinned',
+      toastPinnedModeA: '@@ 1-turn reference pinned (turns gray after next message)',
+      toastClearedSel: '@@ selection removed',
+      toastNoteRemovedExt: 'Current note was removed externally, refreshed',
+      toastSyncedExt: 'Synced external changes',
+      toastSaveErr: (m) => `Save failed: ${m}`,
+      toastCreated: (title) => `Created: ${title}`,
+      toastRenamed: 'Renamed',
+      toastDeleted: 'Note deleted',
+      toastSettingsSaved: 'Settings saved',
+      toastSaved: 'Saved',
+    },
+  };
+
+  function detectBrowserLocale() {
+    const langs =
+      Array.isArray(navigator.languages) && navigator.languages.length
+        ? navigator.languages
+        : [navigator.language || 'en'];
+    for (const l of langs) {
+      if (/^zh\b/i.test(String(l).trim())) return 'zh-CN';
+    }
+    return 'en';
+  }
+
   const el = {
     btnDrawer: $('btn-drawer'),
     btnTitle: $('btn-title'),
@@ -41,6 +311,7 @@
     btnSettingsClose: $('btn-settings-close'),
     btnSettingsCancel: $('btn-settings-cancel'),
     btnSettingsSave: $('btn-settings-save'),
+    langSeg: $('lang-seg'),
     cardQuoteA: $('card-quote-a'),
     cardQuoteB: $('card-quote-b'),
     chkAgentRead: $('chk-agent-read'),
@@ -72,6 +343,9 @@
 
   const state = {
     workspaceUri: '',
+    langPref: 'auto',
+    pendingLangPref: 'auto',
+    browserLocale: detectBrowserLocale(),
     storage: null,
     notes: [],
     currentName: '',
@@ -99,9 +373,68 @@
       consumed: false,
       noteName: '',
       topIdx: 0,
-      anchorIdx: 0, // Fixed bottom-left anchor block index
+      anchorIdx: 0,
     },
   };
+
+  function getEffectiveLang(pref = state.langPref) {
+    if (pref === 'zh-CN' || pref === 'en') return pref;
+    return state.browserLocale;
+  }
+
+  function t(key, ...args) {
+    const lang = getEffectiveLang();
+    const dict = I18N[lang] || I18N.en;
+    const entry = dict[key] !== undefined ? dict[key] : I18N.en[key];
+    return typeof entry === 'function' ? entry(...args) : entry ?? key;
+  }
+
+  function applyI18nToDom() {
+    const lang = getEffectiveLang();
+    document.documentElement.lang = lang;
+    document.title = t('appTitle');
+
+    for (const node of document.querySelectorAll('[data-i18n]')) {
+      node.textContent = t(node.dataset.i18n);
+    }
+    for (const node of document.querySelectorAll('[data-i18n-title]')) {
+      node.title = t(node.dataset.i18nTitle);
+    }
+    for (const node of document.querySelectorAll('[data-i18n-placeholder]')) {
+      node.placeholder = t(node.dataset.i18nPlaceholder);
+    }
+    for (const node of document.querySelectorAll('[data-i18n-aria]')) {
+      node.setAttribute('aria-label', t(node.dataset.i18nAria));
+    }
+
+    if (!state.currentName) {
+      el.btnTitle.textContent = state.notes.length ? t('untitledNote') : t('notebookTitleFallback');
+    }
+    el.btnMode.textContent = state.sourceMode ? t('modeBtnLive') : t('modeBtnSource');
+
+    updateDirIndicators();
+    updateStatusUI();
+    renderNoteList();
+    if (!state.sourceMode && state.currentName) {
+      renderLiveBlocks();
+    } else {
+      renderSelectionOverlay();
+    }
+    if (!el.settingsBackdrop.classList.contains('hidden')) {
+      updateWorkspacePathPreview();
+      if (!el.folderBrowser.classList.contains('hidden') && !state.browserPath) {
+        el.browserCurrent.textContent = t('selectDrive');
+      }
+    }
+    syncLangSegmentUI();
+  }
+
+  function syncLangSegmentUI(pref = state.pendingLangPref) {
+    const activeLang = getEffectiveLang(pref);
+    for (const btn of el.langSeg.querySelectorAll('.lang-seg-btn')) {
+      btn.classList.toggle('active', btn.dataset.lang === activeLang);
+    }
+  }
 
   window.addEventListener('error', (e) => {
     console.error('[md-notes]', e.error || e.message);
@@ -119,6 +452,7 @@
     if (state.workspaceUri) {
       url.searchParams.set('workspaceUri', state.workspaceUri);
     }
+    url.searchParams.set('clientLocale', getEffectiveLang());
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null) {
         url.searchParams.set(k, String(v));
@@ -127,13 +461,14 @@
     const fetcher = window.sidecar?.fetch ? window.sidecar.fetch.bind(window.sidecar) : fetch;
     const res = await fetcher(url.pathname + url.search, { method: 'GET' });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json.error || `请求失败 (${res.status})`);
+    if (!res.ok) throw new Error(json.error || t('reqFailed', res.status));
     return json;
   }
 
   async function apiPost(path, payload = {}) {
     const fetcher = window.sidecar?.fetch ? window.sidecar.fetch.bind(window.sidecar) : fetch;
     const body = JSON.stringify({
+      clientLocale: getEffectiveLang(),
       ...payload,
       workspaceUri: state.workspaceUri,
     });
@@ -143,7 +478,7 @@
       body,
     });
     const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(json.error || `保存失败 (${res.status})`);
+    if (!res.ok) throw new Error(json.error || t('saveReqFailed', res.status));
     return json;
   }
 
@@ -224,7 +559,6 @@
       return;
     }
 
-    // Coordinates relative to #live-editor (blocksRoot offset + child offset)
     const rootTop = el.blocksRoot.offsetTop;
     const rootLeft = el.blocksRoot.offsetLeft;
     const anchorBottomPx = rootTop + botEl.offsetTop + botEl.offsetHeight + 3;
@@ -253,13 +587,13 @@
 
     const lineCount = safeAnchor - safeTop + 1;
     if (sb.dragging || sb.unpinned) {
-      el.selBadge.textContent = `⇕ 向上拖拽框选（${lineCount} 块），松手固定`;
+      el.selBadge.textContent = t('selDragging', lineCount);
     } else if (isModeB) {
-      el.selBadge.textContent = `📌 方式B · 常驻生效中（${lineCount} 块）`;
+      el.selBadge.textContent = t('selModeB', lineCount);
     } else if (isConsumed) {
-      el.selBadge.textContent = `✓ 方式A · 已引用（拖拽可重激活）`;
+      el.selBadge.textContent = t('selModeAConsumed');
     } else {
-      el.selBadge.textContent = `📎 方式A · 待随下条消息引用（${lineCount} 块）`;
+      el.selBadge.textContent = t('selModeAReady', lineCount);
     }
   }
 
@@ -291,9 +625,8 @@
       anchorIdx,
     };
     renderSelectionOverlay();
-    // Immediately sync initial single-block selection so even without dragging it works
     void syncSelectionToBackend({ resetDelivery: true, preserveConsumed: false });
-    showToast('已生成 @@ 选框：向上拖拽框选范围，松手固定');
+    showToast(t('toastSpawnSel'));
   }
 
   function clearSelectionBox() {
@@ -309,7 +642,6 @@
     const startDrag = (e) => {
       if (e.target.closest('#btn-sel-close')) return;
       if (!state.selBox.active) return;
-      // Only allow dragging from the top bar once pinned, or anywhere on the box while unpinned
       if (!state.selBox.unpinned && !e.target.closest('#sel-drag-bar')) return;
 
       e.preventDefault();
@@ -325,7 +657,6 @@
       e.preventDefault();
       const editorRect = el.liveEditor.getBoundingClientRect();
 
-      // Auto-scroll #live-editor when dragging near top or bottom edge
       if (e.clientY < editorRect.top + 28) {
         el.liveEditor.scrollTop = Math.max(0, el.liveEditor.scrollTop - 14);
       } else if (e.clientY > editorRect.bottom - 28) {
@@ -335,7 +666,6 @@
       const relY = e.clientY - editorRect.top + el.liveEditor.scrollTop;
       state.selBox.dragTopPx = relY;
 
-      // Determine topIdx: earliest block from [0 .. anchorIdx] whose vertical midpoint >= relY
       const rootTop = el.blocksRoot.offsetTop;
       let matchedTop = state.selBox.anchorIdx;
       for (let i = state.selBox.anchorIdx; i >= 0; i--) {
@@ -361,12 +691,9 @@
       state.selBox.consumed = false;
       el.selectionBox.releasePointerCapture?.(e.pointerId);
       renderSelectionOverlay();
-      // Ensure latest block edits are saved so Mode A line numbers match disk
       if (state.dirty) void flushSave();
       void syncSelectionToBackend({ resetDelivery: true, preserveConsumed: false });
-      const modeText =
-        getActiveQuoteMode() === 'modeB' ? '常驻上下文已固定' : '单轮引用已固定（发消息后自动变灰）';
-      showToast(`@@ ${modeText}`);
+      showToast(getActiveQuoteMode() === 'modeB' ? t('toastPinnedModeB') : t('toastPinnedModeA'));
     };
 
     el.selectionBox.addEventListener('pointerdown', startDrag);
@@ -379,7 +706,7 @@
       e.preventDefault();
       e.stopPropagation();
       clearSelectionBox();
-      showToast('已删除 @@ 选框');
+      showToast(t('toastClearedSel'));
     });
 
     if (typeof ResizeObserver !== 'undefined') {
@@ -419,10 +746,16 @@
         state.storage.agentRead = snap.agentRead;
         state.storage.agentWrite = snap.agentWrite;
         state.storage.quoteMode = snap.quoteMode;
-        updateBadgesUI();
+        if (snap.lang && snap.lang !== state.langPref) {
+          state.langPref = snap.lang;
+          state.pendingLangPref = snap.lang;
+          state.storage.lang = snap.lang;
+          applyI18nToDom();
+        } else {
+          updateBadgesUI();
+        }
       }
 
-      // Sync Mode A consumed (blue -> gray) transition from backend PreInvocation hook!
       if (
         state.selBox.active &&
         !state.selBox.dragging &&
@@ -460,7 +793,7 @@
       if (noteDeletedExternally) {
         state.currentName = '';
         await loadNotesAndOpen();
-        showToast('外部已移除当前笔记，已刷新');
+        showToast(t('toastNoteRemovedExt'));
         return;
       }
 
@@ -490,7 +823,7 @@
             renderLiveBlocks();
           }
           updateStatusUI();
-          showToast('已同步聊天窗口修改');
+          showToast(t('toastSyncedExt'));
         }
       }
     } catch {
@@ -739,16 +1072,16 @@
   // -------------------------------------------------------------------------
 
   function blockPlaceholder(b, idx) {
-    if (b.type === 'h1') return '一级标题';
-    if (b.type === 'h2') return '二级标题';
-    if (b.type === 'h3') return '三级标题';
-    if (b.type === 'h4') return '四级标题';
-    if (b.type === 'quote') return '引用内容…';
-    if (b.type === 'ul' || b.type === 'ol') return '列表项…';
-    if (b.type === 'todo') return '待办事项…';
-    if (b.type === 'code') return '输入代码…';
+    if (b.type === 'h1') return t('phH1');
+    if (b.type === 'h2') return t('phH2');
+    if (b.type === 'h3') return t('phH3');
+    if (b.type === 'h4') return t('phH4');
+    if (b.type === 'quote') return t('phQuote');
+    if (b.type === 'ul' || b.type === 'ol') return t('phList');
+    if (b.type === 'todo') return t('phTodo');
+    if (b.type === 'code') return t('phCode');
     if (idx === 0 && state.blocks.length <= 2) {
-      return '输入 ## + 空格 建标题，输入 @@ 呼出上下文框选…';
+      return t('phFirstLine');
     }
     return '';
   }
@@ -835,10 +1168,6 @@
     if (state.selBox.active) renderSelectionOverlay();
   }
 
-  /**
-   * Checks if the user just typed `@@` (outside code blocks).
-   * Strips `@@` in-place and triggers the upward-draggable selection box!
-   */
   function tryExtractAtAtTrigger(block, ta, idx) {
     if (block.type === 'code') return false;
     const val = ta.value;
@@ -971,7 +1300,11 @@
     if (state.activeBlockIndex === -1) return;
     const prevIdx = state.activeBlockIndex;
     state.activeBlockIndex = -1;
-    if (prevIdx >= 0 && prevIdx < state.blocks.length && el.blocksRoot.children.length === state.blocks.length) {
+    if (
+      prevIdx >= 0 &&
+      prevIdx < state.blocks.length &&
+      el.blocksRoot.children.length === state.blocks.length
+    ) {
       replaceSingleBlockNode(prevIdx);
     } else {
       renderLiveBlocks();
@@ -1030,7 +1363,7 @@
           scheduleSave();
         });
         const hint = document.createElement('span');
-        hint.textContent = 'Ctrl+Enter 离开代码块';
+        hint.textContent = t('codeLeaveHint');
         bar.append(langInput, hint);
       } else {
         const lbl = document.createElement('span');
@@ -1057,8 +1390,12 @@
       ta.placeholder = blockPlaceholder(block, idx);
 
       let composing = false;
-      ta.addEventListener('compositionstart', () => { composing = true; });
-      ta.addEventListener('blur', () => { composing = false; });
+      ta.addEventListener('compositionstart', () => {
+        composing = true;
+      });
+      ta.addEventListener('blur', () => {
+        composing = false;
+      });
       ta.addEventListener('compositionend', () => {
         composing = false;
         requestAnimationFrame(() => {
@@ -1231,7 +1568,11 @@
           if (block.type === 'ul') {
             nextBlock = makeBlock('ul', { indent: curIndent, text: after });
           } else if (block.type === 'ol') {
-            nextBlock = makeBlock('ol', { indent: curIndent, num: (block.num || 1) + 1, text: after });
+            nextBlock = makeBlock('ol', {
+              indent: curIndent,
+              num: (block.num || 1) + 1,
+              text: after,
+            });
           } else if (block.type === 'todo') {
             nextBlock = makeBlock('todo', { indent: curIndent, checked: false, text: after });
           } else if (block.type === 'quote') {
@@ -1380,14 +1721,22 @@
       const sel = val.slice(start, end);
       if (['bold', 'italic', 'code'].includes(kind)) {
         const wrap = kind === 'bold' ? '**' : kind === 'italic' ? '*' : '`';
-        const fallback = kind === 'bold' ? '加粗文本' : kind === 'italic' ? '斜体文本' : 'code';
+        const fallback =
+          kind === 'bold' ? t('boldFallback') : kind === 'italic' ? t('italicFallback') : 'code';
         const insert = `${wrap}${sel || fallback}${wrap}`;
         ta.value = val.slice(0, start) + insert + val.slice(end);
         ta.focus();
         const pos = sel ? start + insert.length : start + wrap.length;
         ta.setSelectionRange(pos, sel ? pos : start + insert.length - wrap.length);
       } else {
-        const prefixMap = { h1: '# ', h2: '## ', quote: '> ', list: '- ', ol: '1. ', todo: '- [ ] ' };
+        const prefixMap = {
+          h1: '# ',
+          h2: '## ',
+          quote: '> ',
+          list: '- ',
+          ol: '1. ',
+          todo: '- [ ] ',
+        };
         const prefix = prefixMap[kind] || '';
         const lineStart = val.lastIndexOf('\n', start - 1) + 1;
         ta.value = val.slice(0, lineStart) + prefix + val.slice(lineStart);
@@ -1408,7 +1757,14 @@
     const row = el.blocksRoot.children[idx];
     const ta = row?.querySelector('.block-input');
 
-    const toggleMap = { h1: 'h1', h2: 'h2', quote: 'quote', list: 'ul', ol: 'ol', todo: 'todo' };
+    const toggleMap = {
+      h1: 'h1',
+      h2: 'h2',
+      quote: 'quote',
+      list: 'ul',
+      ol: 'ol',
+      todo: 'todo',
+    };
     if (toggleMap[kind]) {
       const targetType = toggleMap[kind];
       if (block.type === targetType) {
@@ -1453,7 +1809,8 @@
     const val = ta.value;
     const sel = val.slice(start, end);
     const wrap = kind === 'bold' ? '**' : kind === 'italic' ? '*' : '`';
-    const fallback = kind === 'bold' ? '加粗文本' : kind === 'italic' ? '斜体文本' : 'code';
+    const fallback =
+      kind === 'bold' ? t('boldFallback') : kind === 'italic' ? t('italicFallback') : 'code';
     const insert = `${wrap}${sel || fallback}${wrap}`;
     ta.value = val.slice(0, start) + insert + val.slice(end);
     block.text = ta.value;
@@ -1481,26 +1838,26 @@
     const now = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     if (d.toDateString() === now.toDateString()) {
-      return `今天 ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      return t('todayTime', `${pad(d.getHours())}:${pad(d.getMinutes())}`);
     }
     return `${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   }
 
   function updateStatusUI() {
-    el.wordCount.textContent = `${countChars(getCurrentMarkdown())} 字`;
+    el.wordCount.textContent = t('wordCount', countChars(getCurrentMarkdown()));
     if (!state.currentName) {
       el.saveStatus.textContent = '';
       el.saveStatus.classList.remove('dirty');
       return;
     }
     if (state.saving) {
-      el.saveStatus.textContent = '保存中…';
+      el.saveStatus.textContent = t('statusSaving');
       el.saveStatus.classList.add('dirty');
     } else if (state.dirty) {
-      el.saveStatus.textContent = '未保存';
+      el.saveStatus.textContent = t('statusUnsaved');
       el.saveStatus.classList.add('dirty');
     } else {
-      el.saveStatus.textContent = '已保存';
+      el.saveStatus.textContent = t('statusSaved');
       el.saveStatus.classList.remove('dirty');
     }
   }
@@ -1510,27 +1867,27 @@
     const r = state.storage.agentRead !== false;
     const w = state.storage.agentWrite !== false;
     if (!r) {
-      el.btnLockBadge.textContent = '🔒 禁访';
+      el.btnLockBadge.textContent = t('badgeNoAccess');
       el.btnLockBadge.classList.add('locked');
     } else if (!w) {
-      el.btnLockBadge.textContent = '👁 只读';
+      el.btnLockBadge.textContent = t('badgeReadOnly');
       el.btnLockBadge.classList.add('locked');
     } else {
-      el.btnLockBadge.textContent = '🔓 读写';
+      el.btnLockBadge.textContent = t('badgeReadWrite');
       el.btnLockBadge.classList.remove('locked');
     }
 
     const isModeB = state.storage.quoteMode === 'modeB';
-    el.btnQuoteBadge.textContent = isModeB ? '@@ 方式B·常驻' : '@@ 方式A·单轮';
+    el.btnQuoteBadge.textContent = isModeB ? t('badgeModeB') : t('badgeModeA');
     el.btnQuoteBadge.classList.toggle('mode-b', isModeB);
   }
 
   function updateDirIndicators() {
     if (!state.storage) return;
-    const tag = state.storage.effectiveMode === 'custom' ? '自定义' : '工作区';
+    const tag = state.storage.effectiveMode === 'custom' ? t('tagCustom') : t('tagWorkspace');
     el.btnDirIndicator.textContent = `${tag}: ${state.storage.activeDir}`;
     el.btnDrawerSettings.textContent = `📁 ${state.storage.activeDir}`;
-    el.emptyDir.textContent = `保存位置：${state.storage.activeDir}`;
+    el.emptyDir.textContent = t('emptyDirPrefix', state.storage.activeDir);
     updateBadgesUI();
   }
 
@@ -1558,13 +1915,13 @@
     if (state.sourceMode) {
       el.liveEditor.classList.add('hidden');
       el.sourceEditor.classList.remove('hidden');
-      el.btnMode.textContent = '实时';
+      el.btnMode.textContent = t('modeBtnLive');
       el.btnMode.classList.add('active');
       el.sourceEditor.focus();
     } else {
       el.sourceEditor.classList.add('hidden');
       el.liveEditor.classList.remove('hidden');
-      el.btnMode.textContent = '源码';
+      el.btnMode.textContent = t('modeBtnSource');
       el.btnMode.classList.remove('active');
       renderLiveBlocks();
     }
@@ -1593,7 +1950,6 @@
         state.lastNoteMtime = saved.updatedAt || state.lastNoteMtime;
         if (saved.dirDigest) state.lastDirDigest = saved.dirDigest;
       }
-      // Keep active @@ selection text/line-numbers synced if text inside box changed!
       if (state.selBox.active && state.selBox.noteName === targetName) {
         void syncSelectionToBackend({ resetDelivery: false, preserveConsumed: true });
       }
@@ -1606,7 +1962,7 @@
         renderNoteList();
       }
     } catch (err) {
-      showToast(`保存失败：${err.message}`);
+      showToast(t('toastSaveErr', err.message));
     } finally {
       state.saving = false;
       updateStatusUI();
@@ -1628,8 +1984,17 @@
     try {
       const data = await apiGet('/api/notes');
       state.storage = data;
+      const prevEffective = getEffectiveLang();
+      if (data.lang) {
+        state.langPref = data.lang;
+        state.pendingLangPref = data.lang;
+      }
       state.lastDirDigest = data.dirDigest || '';
       state.notes = Array.isArray(data.notes) ? data.notes : [];
+
+      if (getEffectiveLang() !== prevEffective) {
+        applyI18nToDom();
+      }
 
       if (data.selection && data.selection.active) {
         state.selBox = {
@@ -1654,7 +2019,7 @@
         state.dirty = false;
         state.lastNoteMtime = 0;
         el.sourceEditor.value = '';
-        el.btnTitle.textContent = '笔记本';
+        el.btnTitle.textContent = t('notebookTitleFallback');
         setSourceMode(false);
         updateStatusUI();
         reportBusyLock();
@@ -1710,7 +2075,7 @@
       state.sourceMode = false;
       await loadNotesAndOpen(created.name);
       activateBlock(state.blocks.length - 1, 0, true);
-      showToast(`已新建：${created.title}`);
+      showToast(t('toastCreated', created.title));
     } catch (err) {
       showToast(err.message);
     }
@@ -1734,7 +2099,7 @@
       if (state.selBox.active) {
         void syncSelectionToBackend({ resetDelivery: false, preserveConsumed: true });
       }
-      showToast('已重命名');
+      showToast(t('toastRenamed'));
     } catch (err) {
       showToast(err.message);
     }
@@ -1752,7 +2117,7 @@
         state.dirty = false;
       }
       await loadNotesAndOpen();
-      showToast('已删除笔记');
+      showToast(t('toastDeleted'));
     } catch (err) {
       showToast(err.message);
     }
@@ -1778,7 +2143,8 @@
   function showNewNoteBox() {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
-    el.inputNewName.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} 笔记`;
+    const ymd = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    el.inputNewName.value = t('defaultNewNoteName', ymd);
     el.newNoteBox.classList.remove('hidden');
     el.inputNewName.focus();
     el.inputNewName.select();
@@ -1786,6 +2152,13 @@
 
   function hideNewNoteBox() {
     el.newNoteBox.classList.add('hidden');
+  }
+
+  function normalizePreviewText(preview) {
+    if (!preview || preview === '空笔记' || preview === 'Empty note') {
+      return t('emptyNotePreview');
+    }
+    return preview;
   }
 
   function renderNoteList() {
@@ -1799,9 +2172,9 @@
       : state.notes;
 
     if (!filtered.length) {
-      el.noteList.innerHTML = `<div class="note-list-empty">${
-        q ? '没有匹配的笔记' : '暂无笔记，点上方「+ 新建」开始记录'
-      }</div>`;
+      el.noteList.innerHTML = `<div class="note-list-empty">${escapeHtml(
+        q ? t('noSearchMatch') : t('emptyNoteList')
+      )}</div>`;
       return;
     }
 
@@ -1827,14 +2200,14 @@
       if (isConfirming) {
         const yes = document.createElement('button');
         yes.className = 'item-act-btn danger';
-        yes.textContent = '确认删除';
+        yes.textContent = t('btnConfirmDelete');
         yes.addEventListener('click', (e) => {
           e.stopPropagation();
           void deleteNoteByName(note.name);
         });
         const no = document.createElement('button');
         no.className = 'item-act-btn';
-        no.textContent = '取消';
+        no.textContent = t('btnCancel');
         no.addEventListener('click', (e) => {
           e.stopPropagation();
           state.confirmDeleteName = '';
@@ -1844,7 +2217,7 @@
       } else {
         const del = document.createElement('button');
         del.className = 'item-act-btn danger';
-        del.textContent = '删除';
+        del.textContent = t('btnDelete');
         del.addEventListener('click', (e) => {
           e.stopPropagation();
           state.confirmDeleteName = note.name;
@@ -1858,7 +2231,7 @@
 
       const preview = document.createElement('div');
       preview.className = 'note-item-preview';
-      preview.textContent = note.preview || '空笔记';
+      preview.textContent = normalizePreviewText(note.preview);
       row.appendChild(preview);
 
       const time = document.createElement('div');
@@ -1930,9 +2303,9 @@
     if (ws) {
       const sepChar = ws.includes('\\') ? '\\' : '/';
       const joined = sub ? `${ws}${ws.endsWith(sepChar) ? '' : sepChar}${sub}` : ws;
-      el.wsResolvedPreview.textContent = `当前解析路径：${joined}`;
+      el.wsResolvedPreview.textContent = t('wsResolvedPath', joined);
     } else {
-      el.wsResolvedPreview.textContent = `未检测到打开的工作区，将回退至：${state.storage?.fallbackDir || ''}`;
+      el.wsResolvedPreview.textContent = t('wsFallbackPath', state.storage?.fallbackDir || '');
     }
   }
 
@@ -1945,6 +2318,11 @@
     try {
       const cfg = await apiGet('/api/config');
       state.storage = cfg;
+      state.langPref = cfg.lang || 'auto';
+      state.pendingLangPref = state.langPref;
+      syncLangSegmentUI(state.pendingLangPref);
+      applyI18nToDom();
+
       el.chkAgentRead.checked = cfg.agentRead !== false;
       el.chkAgentWrite.checked = cfg.agentWrite !== false;
 
@@ -1964,8 +2342,16 @@
     }
   }
 
-  function closeSettings() {
+  function closeSettings(revertPreviewLang = false) {
     el.settingsBackdrop.classList.add('hidden');
+    if (revertPreviewLang) {
+      const savedLang = state.storage?.lang || 'auto';
+      if (state.langPref !== savedLang) {
+        state.langPref = savedLang;
+        state.pendingLangPref = savedLang;
+        applyI18nToDom();
+      }
+    }
   }
 
   async function loadFolderBrowser(targetPath) {
@@ -1973,13 +2359,13 @@
       const data = await apiGet('/api/fs/browse', { path: targetPath });
       state.browserPath = data.current || '';
       state.browserParent = data.parent || '';
-      el.browserCurrent.textContent = state.browserPath || '选择磁盘';
+      el.browserCurrent.textContent = state.browserPath || t('selectDrive');
       el.browserList.innerHTML = '';
 
       if (!data.dirs.length) {
         const empty = document.createElement('div');
         empty.className = 'note-list-empty';
-        empty.textContent = '此目录下没有子文件夹';
+        empty.textContent = t('noSubfolders');
         el.browserList.appendChild(empty);
         return;
       }
@@ -2008,6 +2394,7 @@
     const workspaceSubdir = el.inputWsSubdir.value.trim();
     const agentRead = Boolean(el.chkAgentRead.checked);
     const agentWrite = Boolean(el.chkAgentWrite.checked);
+    const lang = state.pendingLangPref || 'auto';
 
     try {
       const prevDir = state.storage?.activeDir || '';
@@ -2019,20 +2406,23 @@
         workspaceSubdir,
         agentRead,
         agentWrite,
+        lang,
+        clientLocale: getEffectiveLang(lang),
       });
       state.storage = updated;
+      state.langPref = updated.lang || lang;
+      state.pendingLangPref = state.langPref;
       if (state.selBox.active && quoteMode !== prevQuoteMode) {
         state.selBox.consumed = false;
       }
-      updateDirIndicators();
-      renderSelectionOverlay();
-      closeSettings();
+      applyI18nToDom();
+      closeSettings(false);
       if (updated.activeDir !== prevDir) {
         state.currentName = '';
         state.dirty = false;
         await loadNotesAndOpen();
       }
-      showToast('设置已保存');
+      showToast(t('toastSettingsSaved'));
     } catch (err) {
       el.settingsError.textContent = err.message;
       el.settingsError.classList.remove('hidden');
@@ -2150,15 +2540,25 @@
     }
   });
 
+  el.langSeg.addEventListener('click', (e) => {
+    const btn = e.target instanceof Element ? e.target.closest('.lang-seg-btn') : null;
+    if (!btn) return;
+    const nextPref = btn.dataset.lang || 'auto';
+    state.pendingLangPref = nextPref;
+    state.langPref = nextPref;
+    syncLangSegmentUI(nextPref);
+    applyI18nToDom();
+  });
+
   el.btnSettings.addEventListener('click', () => void openSettings());
   el.btnLockBadge.addEventListener('click', () => void openSettings());
   el.btnQuoteBadge.addEventListener('click', () => void openSettings());
   el.btnDirIndicator.addEventListener('click', () => void openSettings());
   el.btnDrawerSettings.addEventListener('click', () => void openSettings());
-  el.btnSettingsClose.addEventListener('click', closeSettings);
-  el.btnSettingsCancel.addEventListener('click', closeSettings);
+  el.btnSettingsClose.addEventListener('click', () => closeSettings(true));
+  el.btnSettingsCancel.addEventListener('click', () => closeSettings(true));
   el.settingsBackdrop.addEventListener('click', (e) => {
-    if (e.target === el.settingsBackdrop) closeSettings();
+    if (e.target === el.settingsBackdrop) closeSettings(true);
   });
   el.btnSettingsSave.addEventListener('click', () => void saveSettingsForm());
 
@@ -2218,7 +2618,7 @@
     const mod = e.ctrlKey || e.metaKey;
     if (mod && e.key.toLowerCase() === 's') {
       e.preventDefault();
-      void flushSave().then(() => showToast('已保存'));
+      void flushSave().then(() => showToast(t('toastSaved')));
     } else if (mod && e.key.toLowerCase() === 'e') {
       if (state.currentName && el.settingsBackdrop.classList.contains('hidden')) {
         e.preventDefault();
@@ -2231,7 +2631,7 @@
       showNewNoteBox();
     } else if (e.key === 'Escape') {
       if (!el.settingsBackdrop.classList.contains('hidden')) {
-        closeSettings();
+        closeSettings(true);
       } else if (el.drawer.classList.contains('open')) {
         closeDrawer();
       } else if (!state.sourceMode && state.activeBlockIndex !== -1) {
@@ -2263,6 +2663,7 @@
   }
 
   async function init() {
+    applyI18nToDom();
     setupSelectionDragEvents();
 
     setInterval(() => {

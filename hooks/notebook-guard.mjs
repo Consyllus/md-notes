@@ -45,6 +45,68 @@ const WRITE_TOOLS = new Set([
   'delete_file',
 ]);
 
+const HOOK_MSG = {
+  'zh-CN': {
+    denyRead: '笔记本已在设置中关闭「允许 Agent 读取笔记」权限锁，无法读取笔记目录。',
+    denyWrite: '笔记本已在设置中关闭「允许 Agent 修改笔记」权限锁，禁止写入或修改笔记。',
+    denyBusy:
+      '用户当前键盘焦点正停留在右侧笔记本中且存在未保存内容，已暂停 Agent 写入；请等用户移开光标或保存后再试。',
+    denyCmdRead: '笔记本已开启读取权限锁，禁止通过命令行访问笔记目录。',
+    denyCmdWrite: '笔记本已开启修改权限锁，禁止通过命令行修改笔记目录。',
+    denyCmdBusy: '用户当前光标正在右侧笔记本中编辑且尚未保存，已暂停命令行写入笔记目录。',
+    modeASingleLine: (n) => `第 ${n} 行`,
+    modeARangeLine: (s, e) => `第 ${s}–${e} 行`,
+    modeAInject: (target, lineLabel, uri, s, e) =>
+      `用户在右侧笔记本中框选了文档索引：${target}（${lineLabel}，URI: ${uri}#L${s}-L${e}）。请根据该路径与行号范围定位并读取对应段落来回答本轮问题。`,
+    modeBCleared: '用户已移除右侧笔记本中的固定选区片段',
+    modeBInject: (snippet) =>
+      `以下是用户在右侧笔记本中通过 \`@@\` 固定框选的参考内容：\n"""\n${snippet}\n"""`,
+  },
+  en: {
+    denyRead:
+      'Agent read access is disabled in Notebook Settings ("Allow Agent to Read Notes" is off).',
+    denyWrite:
+      'Agent write access is disabled in Notebook Settings ("Allow Agent to Edit Notes" is off).',
+    denyBusy:
+      'The user is currently editing unsaved content in the right-hand notebook; Agent writes are paused until focus leaves or the note is saved.',
+    denyCmdRead:
+      'Agent read lock is enabled in Notebook Settings; shell access to the notes directory is blocked.',
+    denyCmdWrite:
+      'Agent write lock is enabled in Notebook Settings; shell modifications to the notes directory are blocked.',
+    denyCmdBusy:
+      'The user is currently editing unsaved content in the right-hand notebook; shell writes to the notes directory are paused.',
+    modeASingleLine: (n) => `line ${n}`,
+    modeARangeLine: (s, e) => `lines ${s}–${e}`,
+    modeAInject: (target, lineLabel, uri, s, e) =>
+      `The user selected a note index in the right-hand notebook: ${target} (${lineLabel}, URI: ${uri}#L${s}-L${e}). Locate and read that path and line range to answer this turn.`,
+    modeBCleared: 'The user removed the pinned selection snippet in the right-hand notebook.',
+    modeBInject: (snippet) =>
+      `Reference content pinned by the user via \`@@\` in the right-hand notebook:\n"""\n${snippet}\n"""`,
+  },
+};
+
+function detectSystemLocale() {
+  try {
+    const sys =
+      process.env.LC_ALL ||
+      process.env.LC_MESSAGES ||
+      process.env.LANG ||
+      Intl.DateTimeFormat().resolvedOptions().locale ||
+      '';
+    return /^zh\b/i.test(String(sys).trim()) ? 'zh-CN' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+function resolveEffectiveLang(settings) {
+  if (settings?.lang === 'zh-CN' || settings?.lang === 'en') return settings.lang;
+  if (settings?.effectiveLang === 'zh-CN' || settings?.effectiveLang === 'en') {
+    return settings.effectiveLang;
+  }
+  return detectSystemLocale();
+}
+
 function writeJsonStdout(obj) {
   process.stdout.write(JSON.stringify(obj) + '\n');
 }
@@ -119,8 +181,11 @@ function loadAllState(payload) {
     }
   }
 
+  const effectiveLang = resolveEffectiveLang(settings);
+
   return {
     stateDir: selection ? selectionDir : resolvePrimaryStateDir(payload),
+    effectiveLang,
     settings: {
       mode: settings?.mode === 'custom' ? 'custom' : 'workspace',
       customDir: typeof settings?.customDir === 'string' ? settings.customDir.trim() : '',
@@ -129,6 +194,8 @@ function loadAllState(payload) {
       agentRead: settings?.agentRead !== false,
       agentWrite: settings?.agentWrite !== false,
       quoteMode: settings?.quoteMode === 'modeB' ? 'modeB' : 'modeA',
+      lang: settings?.lang === 'zh-CN' || settings?.lang === 'en' ? settings.lang : 'auto',
+      effectiveLang,
     },
     busy: busy && typeof busy === 'object' ? busy : null,
     selection: selection && typeof selection === 'object' ? selection : null,
@@ -304,7 +371,8 @@ export function evaluateGuard(payload) {
   const args = payload?.toolCall?.args || {};
   const cwd = payload?.cwd || process.cwd();
 
-  const { settings, busy } = loadAllState(payload);
+  const { effectiveLang, settings, busy } = loadAllState(payload);
+  const msg = HOOK_MSG[effectiveLang === 'zh-CN' ? 'zh-CN' : 'en'];
   const isBusy =
     Boolean(busy?.focusedAndUnsaved) &&
     typeof busy?.updatedAt === 'number' &&
@@ -322,7 +390,7 @@ export function evaluateGuard(payload) {
       if (paths.some((p) => pathTouchesProtected(p, protectedList))) {
         return {
           decision: 'deny',
-          reason: '笔记本已在设置中关闭「允许 Agent 读取笔记」权限锁，无法读取笔记目录。',
+          reason: msg.denyRead,
         };
       }
     }
@@ -335,14 +403,13 @@ export function evaluateGuard(payload) {
       if (!settings.agentWrite) {
         return {
           decision: 'deny',
-          reason: '笔记本已在设置中关闭「允许 Agent 修改笔记」权限锁，禁止写入或修改笔记。',
+          reason: msg.denyWrite,
         };
       }
       if (isBusy) {
         return {
           decision: 'deny',
-          reason:
-            '用户当前键盘焦点正停留在右侧笔记本中且存在未保存内容，已暂停 Agent 写入；请等用户移开光标或保存后再试。',
+          reason: msg.denyBusy,
         };
       }
     }
@@ -355,19 +422,19 @@ export function evaluateGuard(payload) {
       if (!settings.agentRead) {
         return {
           decision: 'deny',
-          reason: '笔记本已开启读取权限锁，禁止通过命令行访问笔记目录。',
+          reason: msg.denyCmdRead,
         };
       }
       if (cmdCheck.writes && !settings.agentWrite) {
         return {
           decision: 'deny',
-          reason: '笔记本已开启修改权限锁，禁止通过命令行修改笔记目录。',
+          reason: msg.denyCmdWrite,
         };
       }
       if (cmdCheck.writes && isBusy) {
         return {
           decision: 'deny',
-          reason: '用户当前光标正在右侧笔记本中编辑且尚未保存，已暂停命令行写入笔记目录。',
+          reason: msg.denyCmdBusy,
         };
       }
     }
@@ -390,9 +457,10 @@ export function evaluatePreInvocation(payload) {
     return {};
   }
 
-  const { stateDir, settings, selection } = loadAllState(payload);
+  const { stateDir, effectiveLang, settings, selection } = loadAllState(payload);
   if (!selection) return {};
 
+  const msg = HOOK_MSG[effectiveLang === 'zh-CN' ? 'zh-CN' : 'en'];
   const convId = String(payload?.conversationId || 'default');
   const deliveredMap =
     selection.deliveredByConv && typeof selection.deliveredByConv === 'object'
@@ -410,7 +478,6 @@ export function evaluatePreInvocation(payload) {
     }
 
     const filePath = String(selection.filePath || '').trim();
-    const noteName = String(selection.noteName || '笔记.md').trim();
     const startLine = Number(selection.startLine) || 1;
     const endLine = Number(selection.endLine) || startLine;
     let fileUri = String(selection.fileUri || '').trim();
@@ -430,15 +497,21 @@ export function evaluatePreInvocation(payload) {
     };
     saveSelectionFile(stateDir, updatedSel);
 
-    const lineLabel = startLine === endLine ? `第 ${startLine} 行` : `第 ${startLine}–${endLine} 行`;
+    const lineLabel =
+      startLine === endLine
+        ? msg.modeASingleLine(startLine)
+        : msg.modeARangeLine(startLine, endLine);
     return {
       injectSteps: [
         {
           systemMessage: {
-            systemMessage:
-              `用户在右侧笔记本中框选了文档索引：` +
-              `${filePath || fileUri}（${lineLabel}，URI: ${fileUri}#L${startLine}-L${endLine}）。` +
-              `请根据该路径与行号范围定位并读取对应段落来回答本轮问题。`,
+            systemMessage: msg.modeAInject(
+              filePath || fileUri,
+              lineLabel,
+              fileUri,
+              startLine,
+              endLine
+            ),
           },
         },
       ],
@@ -456,8 +529,7 @@ export function evaluatePreInvocation(payload) {
         injectSteps: [
           {
             systemMessage: {
-              systemMessage:
-                '用户已移除右侧笔记本中的固定选区片段',
+              systemMessage: msg.modeBCleared,
             },
           },
         ],
@@ -486,9 +558,7 @@ export function evaluatePreInvocation(payload) {
     injectSteps: [
       {
         systemMessage: {
-          systemMessage:
-            `以下是用户在右侧笔记本中通过 \`@@\` 固定框选的参考内容：\n` +
-            `"""\n${snippet}\n"""`,
+          systemMessage: msg.modeBInject(snippet),
         },
       },
     ],

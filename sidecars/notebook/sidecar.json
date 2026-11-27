@@ -2,16 +2,16 @@
   "command": "node",
   "args": ["main.mjs"],
   "restart_policy": "always",
-  "display_name": "Markdown 笔记本",
-  "description": "极简右侧 Markdown 笔记本，支持多文件管理、默认跟随当前工作区存储以及自定义存储目录。",
+  "display_name": "Markdown Notes",
+  "description": "Minimalist right-pane Markdown notebook with live block preview, @@ context selection, and Agent access locks.",
   "has_web_ui": true,
   "ui_config": {
-    "display_name": "Markdown 笔记本",
+    "display_name": "Markdown Notes",
     "views": [
       {
         "path": "/",
         "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE",
-        "title": "笔记本"
+        "title": "Notes"
       }
     ]
   }

@@ -1,47 +1,50 @@
-# Markdown 笔记本 (`md-notes`)
+# Markdown Notes (`md-notes`)
 
-一个运行在 Google Antigravity 右侧辅助面板（Aux Pane）中的极简本地 Markdown 笔记本插件。
+English | [简体中文](./README.zh-CN.md)
 
-## 快速安装
+A minimalist local Markdown notebook running inside the Google Antigravity Auxiliary Pane. Built-in bilingual UI (**English** & **简体中文**, auto-detected from your system or switchable anytime in Settings).
 
-### 1. Antigravity 一键安装（推荐）
+## Quick Install
+
+### Antigravity One-Line Install (Recommended)
 
 ```bash
 agy plugin install https://github.com/Consyllus/md-notes
 ```
 
-
+> Once installed, ask *"Open the notebook"* or type `/notebook` in chat to open the right-hand side pane.
 
 ---
 
-## 核心特性
+## Key Features
 
-- **实时分块预览与源码双模**：默认提供所见即所得的 Markdown 分块编辑体验，支持标题（`H1`–`H4`）、**多级无序 / 有序 / 待办列表**（`• / ◦ / ▪` 自动切换层级符号与自动编号）、代码块、表格、引用块与行内格式渲染，并可通过 `Ctrl+E` 一键切换纯 Markdown 源码模式。
-- **`@@` 框选上下文投喂（双模式互斥）**：在任意行输入 `@@` 即可呼出向上拖拽选框，精准控制向 Agent 暴露的笔记内容：
-  - **方式 A · 单轮文档索引引用（默认）**：向 Agent 发送单轮文件 URI 与起止行号索引，发送一轮消息后选框自动变灰失效。
-  - **方式 B · 常驻纯片段直投**：仅注入框选区域的纯文本片段（不暴露文档其余内容与路径），跨轮次常驻生效并内置会话级内容哈希去重，避免重复消耗 Token。
-- **Agent 访问权限锁（`PreToolUse` 引擎级拦截）**：
-  - 独立开关控制「允许 Agent 读取笔记」与「允许 Agent 修改笔记」。
-  - **防编辑冲突动态写锁**：当用户光标正聚焦在笔记本内且有未保存修改时，自动临时拦截 Agent 写入，移开焦点或保存后自动放行。
-- **多笔记管理与灵活存储**：
-  - 支持新建、全文搜索、切换、内联重命名与删除多个 `.md` 文件，实时自动保存。
-  - 默认跟随 `<当前工作区>/notes` 目录，也可在设置面板指定任意本地自定义文件夹（内置目录浏览器）。
+- **Live Block Preview & Raw Source Mode (`Ctrl+E`)**: Distraction-free WYSIWYG block editing supporting headings (`H1`–`H4`), **multi-level bullet, numbered, and task lists** (`• / ◦ / ▪` markers & auto-renumbering), code blocks, tables, blockquotes, and inline formatting.
+- **`@@` Context Selection Box (Two Mutually Exclusive Modes)**: Type `@@` in any block to spawn an upward-draggable selection frame and control exactly what the Agent sees:
+  - **Mode A · Single-Turn Line Reference (Default)**: Sends only the file URI and line range for a single chat turn; the blue frame automatically turns gray once consumed.
+  - **Mode B · Persistent Snippet Injection**: Injects only the selected plain text (zero file path or outside content exposure), staying active across turns with per-conversation SHA-1 deduplication to save tokens.
+- **Agent Access Locks (`PreToolUse` Engine Guard)**:
+  - Independent toggles for **Allow Agent to Read Notes** and **Allow Agent to Edit Notes**.
+  - **Dynamic Focus Busy-Lock**: Automatically pauses Agent writes while your cursor is focused inside the notebook with unsaved edits, resuming as soon as you save or move focus away.
+- **Multi-Note Management & Flexible Storage**:
+  - Create, search, switch, inline-rename, and delete `.md` files with debounced auto-save.
+  - Follows `<workspace>/notes` by default, or points to any fixed local folder via the built-in directory browser.
+- **Built-in i18n (`en` & `zh-CN`)**: Automatically matches your system locale on first launch, with instant live language switching inside Notebook Settings.
 
-## 常用快捷键
+## Keyboard Shortcuts
 
-| 快捷键 / 触发词 | 功能说明 |
+| Shortcut / Trigger | Action |
 | :--- | :--- |
-| `@@` | 在当前块生成上下文选框，向上拖拽框选范围 |
-| `Tab` / `Shift+Tab` | 在无序、有序、待办列表项中缩进 / 退回层级 |
-| `Enter` / `Backspace` | 延续当前列表层级；在空子列表项按回车或行首退格逐级退回 |
-| `Ctrl+S` / `Cmd+S` | 立即保存当前笔记 |
-| `Ctrl+E` / `Cmd+E` | 切换「实时分块预览」与「Markdown 源码」模式 |
-| `Ctrl+B` / `Cmd+B` | 加粗选中文本 |
-| `Ctrl+N` / `Cmd+N` | 新建笔记 |
+| `@@` | Spawn context selection frame at current block; drag upward to select range |
+| `Tab` / `Shift+Tab` | Indent / outdent bullet, numbered, or task list items |
+| `Enter` / `Backspace` | Continue current list level; outdent step-by-step on empty nested items |
+| `Ctrl+S` / `Cmd+S` | Save current note immediately |
+| `Ctrl+E` / `Cmd+E` | Toggle between Live Block Preview and Raw Markdown Source |
+| `Ctrl+B` / `Cmd+B` | Bold selected text |
+| `Ctrl+N` / `Cmd+N` | Create a new note |
 
-## 其它安装方式
+## Alternative Installation
 
-### 手动克隆至全局插件目录（Antigravity App / IDE）
+### Manual Clone (Antigravity App / IDE)
 
 **Windows (PowerShell)**
 ```powershell
@@ -53,9 +56,9 @@ git clone https://github.com/Consyllus/md-notes.git "$HOME\.gemini\config\plugin
 git clone https://github.com/Consyllus/md-notes.git ~/.gemini/config/plugins/md-notes
 ```
 
-> 若只需在单个项目内启用，也可克隆至项目根目录下的 `.agents/plugins/md-notes`。安装完成后，在对话中输入「打开笔记本」或调用 `/notebook` 即可唤起右侧笔记本面板。
+> For workspace-only installation, clone into `.agents/plugins/md-notes` inside your project root.
 
-## 关于与版权
+## Credits & License
 
 - **Organization**: [Consyllus](https://consyllus.com)
 - **Author**: FalsenJing

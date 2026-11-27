@@ -21,6 +21,78 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const MAX_NOTE_BYTES = 5 * 1024 * 1024; // 5 MiB guard
 
+const MSG = {
+  'zh-CN': {
+    emptyFilename: '笔记文件名不能为空',
+    invalidFilename: '文件名不合法，请换一个名称',
+    filenameTooLong: '文件名过长（最多 120 个字符）',
+    outsideDir: '不允许访问存储目录之外的文件',
+    emptyNote: '空笔记',
+    largeFile: '文件较大',
+    readDirErr: (dir, msg) => `无法读取目录 ${dir}: ${msg}`,
+    dirNotFound: (p) => `目录不存在：${p}`,
+    notADir: (p) => `不是有效目录：${p}`,
+    defaultNoteSuffix: '笔记',
+    customDirRequired: '请输入自定义存储目录的绝对路径',
+    customDirAbsolute: '自定义目录必须是绝对路径（例如 C:\\Notes 或 /Users/you/Notes）',
+    customDirNotFolder: '指定路径已存在且不是文件夹',
+    noteNotFound: (n) => `找不到笔记：${n}`,
+    noteTooLargeOpen: '该笔记文件超过 5MB，暂不支持在侧边栏直接打开',
+    noteTooLargeSave: '笔记内容超过 5MB 限制',
+    oldNoteNotFound: (n) => `找不到原笔记：${n}`,
+    duplicateNote: (n) => `已存在同名笔记：${n}`,
+  },
+  en: {
+    emptyFilename: 'Note filename cannot be empty',
+    invalidFilename: 'Invalid filename, please choose another name',
+    filenameTooLong: 'Filename is too long (max 120 characters)',
+    outsideDir: 'Access outside the configured notes directory is not allowed',
+    emptyNote: 'Empty note',
+    largeFile: 'Large file',
+    readDirErr: (dir, msg) => `Failed to read directory ${dir}: ${msg}`,
+    dirNotFound: (p) => `Directory does not exist: ${p}`,
+    notADir: (p) => `Not a valid directory: ${p}`,
+    defaultNoteSuffix: 'Notes',
+    customDirRequired: 'Please enter an absolute path for the custom directory',
+    customDirAbsolute: 'Custom directory must be an absolute path (e.g. C:\\Notes or /Users/you/Notes)',
+    customDirNotFolder: 'The specified path already exists and is not a folder',
+    noteNotFound: (n) => `Note not found: ${n}`,
+    noteTooLargeOpen: 'This note exceeds 5MB and cannot be opened in the side pane',
+    noteTooLargeSave: 'Note content exceeds the 5MB limit',
+    oldNoteNotFound: (n) => `Original note not found: ${n}`,
+    duplicateNote: (n) => `A note with this name already exists: ${n}`,
+  },
+};
+
+function detectSystemLocale() {
+  try {
+    const sys =
+      process.env.LC_ALL ||
+      process.env.LC_MESSAGES ||
+      process.env.LANG ||
+      Intl.DateTimeFormat().resolvedOptions().locale ||
+      '';
+    return /^zh\b/i.test(String(sys).trim()) ? 'zh-CN' : 'en';
+  } catch {
+    return 'en';
+  }
+}
+
+function normalizeLangPref(val) {
+  if (val === 'zh-CN' || val === 'en' || val === 'auto') return val;
+  return 'auto';
+}
+
+function resolveEffectiveLang(langPref, hintLang) {
+  if (langPref === 'zh-CN' || langPref === 'en') return langPref;
+  if (hintLang === 'zh-CN' || hintLang === 'en') return hintLang;
+  return detectSystemLocale();
+}
+
+function getMsg(effectiveLang) {
+  return MSG[effectiveLang === 'zh-CN' ? 'zh-CN' : 'en'];
+}
+
 function getSettingsDir() {
   const envDir = String(process.env.ANTIGRAVITY_EXECUTABLE_DATA_DIR || '').trim();
   return envDir || join(__dirname, '.data');
@@ -51,6 +123,8 @@ function loadRawSettingsObj() {
 
 function loadSettings() {
   const parsed = loadRawSettingsObj();
+  const lang = normalizeLangPref(parsed.lang);
+  const effectiveLang = resolveEffectiveLang(lang, parsed.effectiveLang);
   return {
     mode: parsed.mode === 'custom' ? 'custom' : 'workspace',
     customDir: typeof parsed.customDir === 'string' ? parsed.customDir.trim() : '',
@@ -59,6 +133,8 @@ function loadSettings() {
     agentRead: parsed.agentRead !== false,
     agentWrite: parsed.agentWrite !== false,
     quoteMode: parsed.quoteMode === 'modeB' ? 'modeB' : 'modeA',
+    lang,
+    effectiveLang,
   };
 }
 
@@ -67,6 +143,8 @@ function saveSettings(next) {
   mkdirSync(dir, { recursive: true });
   const rawPrev = loadRawSettingsObj();
   const current = loadSettings();
+  const lang = next.lang !== undefined ? normalizeLangPref(next.lang) : current.lang;
+  const effectiveLang = resolveEffectiveLang(lang, next.clientLocale || current.effectiveLang);
   const normalized = {
     ...rawPrev,
     mode: next.mode !== undefined ? (next.mode === 'custom' ? 'custom' : 'workspace') : current.mode,
@@ -84,6 +162,8 @@ function saveSettings(next) {
           ? 'modeB'
           : 'modeA'
         : current.quoteMode,
+    lang,
+    effectiveLang,
   };
   writeFileSync(getSettingsFile(), JSON.stringify(normalized, null, 2), 'utf8');
   return normalized;
@@ -153,8 +233,12 @@ function sanitizeSubdir(sub) {
   return parts.join(sep);
 }
 
-function resolveStorageInfo(workspaceUri) {
+function resolveStorageInfo(workspaceUri, clientLocale) {
   const settings = loadSettings();
+  const effectiveLang = resolveEffectiveLang(
+    settings.lang,
+    clientLocale === 'zh-CN' || clientLocale === 'en' ? clientLocale : settings.effectiveLang
+  );
   const workspacePath = decodeFileUriToPath(workspaceUri);
   const safeSub = sanitizeSubdir(settings.workspaceSubdir);
   const fallbackDir = join(homedir(), 'Documents', 'AntigravityNotes');
@@ -181,6 +265,8 @@ function resolveStorageInfo(workspaceUri) {
     agentRead: settings.agentRead,
     agentWrite: settings.agentWrite,
     quoteMode: settings.quoteMode,
+    lang: settings.lang,
+    effectiveLang,
     workspacePath,
     defaultDir,
     fallbackDir,
@@ -198,44 +284,47 @@ function ensureDir(dirPath) {
 const INVALID_CHARS_RE = /[<>:"/\\|?*\x00-\x1F]/g;
 const WINDOWS_RESERVED_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
 
-export function sanitizeNoteFilename(input) {
+export function sanitizeNoteFilename(input, effectiveLang = 'en') {
+  const m = getMsg(effectiveLang);
   let raw = String(input || '').trim();
   raw = basename(raw.replace(/\\/g, '/'));
   raw = raw.replace(INVALID_CHARS_RE, '').trim();
   raw = raw.replace(/^\.+/, '').replace(/\.+$/, '').trim();
   if (!raw) {
-    throw new Error('笔记文件名不能为空');
+    throw new Error(m.emptyFilename);
   }
   if (!raw.toLowerCase().endsWith('.md')) {
     raw += '.md';
   }
   const stem = raw.slice(0, -3).trim();
   if (!stem || WINDOWS_RESERVED_RE.test(stem)) {
-    throw new Error('文件名不合法，请换一个名称');
+    throw new Error(m.invalidFilename);
   }
   if (raw.length > 120) {
-    throw new Error('文件名过长（最多 120 个字符）');
+    throw new Error(m.filenameTooLong);
   }
   return `${stem}.md`;
 }
 
-function resolveContainedFile(activeDir, filename) {
-  const safeName = sanitizeNoteFilename(filename);
+function resolveContainedFile(activeDir, filename, effectiveLang = 'en') {
+  const m = getMsg(effectiveLang);
+  const safeName = sanitizeNoteFilename(filename, effectiveLang);
   const root = resolve(activeDir);
   const target = resolve(root, safeName);
   const prefix = root.endsWith(sep) ? root : root + sep;
   if (!target.startsWith(prefix)) {
-    throw new Error('不允许访问存储目录之外的文件');
+    throw new Error(m.outsideDir);
   }
   return { safeName, fullPath: target };
 }
 
-function extractPreview(content) {
+function extractPreview(content, effectiveLang = 'en') {
+  const m = getMsg(effectiveLang);
   const lines = String(content || '')
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter((l) => l && !/^---+$/.test(l));
-  if (!lines.length) return '空笔记';
+  if (!lines.length) return m.emptyNote;
   const clean = lines
     .slice(0, 2)
     .join(' · ')
@@ -243,10 +332,11 @@ function extractPreview(content) {
     .replace(/[*_`~>#-]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  return clean.slice(0, 72) || '空笔记';
+  return clean.slice(0, 72) || m.emptyNote;
 }
 
-function listNotesInDir(activeDir) {
+function listNotesInDir(activeDir, effectiveLang = 'en') {
+  const m = getMsg(effectiveLang);
   if (!existsSync(activeDir)) {
     return [];
   }
@@ -254,7 +344,7 @@ function listNotesInDir(activeDir) {
   try {
     entries = readdirSync(activeDir, { withFileTypes: true });
   } catch (err) {
-    throw new Error(`无法读取目录 ${activeDir}: ${err.message}`);
+    throw new Error(m.readDirErr(activeDir, err.message));
   }
 
   const notes = [];
@@ -267,11 +357,11 @@ function listNotesInDir(activeDir) {
       let preview = '';
       if (st.size > 0 && st.size <= MAX_NOTE_BYTES) {
         const snippet = readFileSync(fullPath, 'utf8').slice(0, 600);
-        preview = extractPreview(snippet);
+        preview = extractPreview(snippet, effectiveLang);
       } else if (st.size === 0) {
-        preview = '空笔记';
+        preview = m.emptyNote;
       } else {
-        preview = '文件较大';
+        preview = m.largeFile;
       }
       notes.push({
         name: entry.name,
@@ -309,7 +399,8 @@ function computeDirDigest(activeDir) {
   }
 }
 
-function browseDirectories(targetPath) {
+function browseDirectories(targetPath, effectiveLang = 'en') {
+  const m = getMsg(effectiveLang);
   const raw = String(targetPath || '').trim();
   if (!raw) {
     if (process.platform === 'win32') {
@@ -326,16 +417,16 @@ function browseDirectories(targetPath) {
       }
       return { current: '', parent: '', dirs: drives };
     }
-    return browseDirectories('/');
+    return browseDirectories('/', effectiveLang);
   }
 
   const resolved = normalize(resolve(raw));
   if (!existsSync(resolved)) {
-    throw new Error(`目录不存在：${resolved}`);
+    throw new Error(m.dirNotFound(resolved));
   }
   const st = statSync(resolved);
   if (!st.isDirectory()) {
-    throw new Error(`不是有效目录：${resolved}`);
+    throw new Error(m.notADir(resolved));
   }
 
   const parentDir = dirname(resolved);
@@ -351,25 +442,30 @@ function browseDirectories(targetPath) {
       path: join(resolved, entry.name),
     });
   }
-  dirs.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'));
+  dirs.sort((a, b) => a.name.localeCompare(b.name, effectiveLang === 'zh-CN' ? 'zh-CN' : 'en'));
   return { current: resolved, parent, dirs };
 }
 
-function defaultNoteName() {
+function defaultNoteName(effectiveLang = 'en') {
+  const m = getMsg(effectiveLang);
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd} 笔记.md`;
+  return `${yyyy}-${mm}-${dd} ${m.defaultNoteSuffix}.md`;
 }
 
 export const handlers = {
   getConfig(data = {}) {
-    return resolveStorageInfo(data.workspaceUri);
+    return resolveStorageInfo(data.workspaceUri, data.clientLocale);
   },
 
   updateConfig(data = {}) {
     const current = loadSettings();
+    const lang = data.lang !== undefined ? normalizeLangPref(data.lang) : current.lang;
+    const effectiveLang = resolveEffectiveLang(lang, data.clientLocale || current.effectiveLang);
+    const m = getMsg(effectiveLang);
+
     const mode =
       data.mode !== undefined ? (data.mode === 'custom' ? 'custom' : 'workspace') : current.mode;
     const customDir =
@@ -390,22 +486,40 @@ export const handlers = {
 
     if (mode === 'custom') {
       if (!customDir) {
-        throw new Error('请输入自定义存储目录的绝对路径');
+        throw new Error(m.customDirRequired);
       }
       if (!isAbsolute(customDir)) {
-        throw new Error('自定义目录必须是绝对路径（例如 C:\\Notes 或 D:\\Study\\Notes）');
+        throw new Error(m.customDirAbsolute);
       }
       const norm = normalize(customDir);
       if (existsSync(norm)) {
         if (!statSync(norm).isDirectory()) {
-          throw new Error('指定路径已存在且不是文件夹');
+          throw new Error(m.customDirNotFolder);
         }
       } else {
         mkdirSync(norm, { recursive: true });
       }
-      saveSettings({ mode: 'custom', customDir: norm, workspaceSubdir, agentRead, agentWrite, quoteMode });
+      saveSettings({
+        mode: 'custom',
+        customDir: norm,
+        workspaceSubdir,
+        agentRead,
+        agentWrite,
+        quoteMode,
+        lang,
+        clientLocale: effectiveLang,
+      });
     } else {
-      saveSettings({ mode: 'workspace', customDir, workspaceSubdir, agentRead, agentWrite, quoteMode });
+      saveSettings({
+        mode: 'workspace',
+        customDir,
+        workspaceSubdir,
+        agentRead,
+        agentWrite,
+        quoteMode,
+        lang,
+        clientLocale: effectiveLang,
+      });
     }
 
     const existingSel = loadSelectionState();
@@ -417,7 +531,7 @@ export const handlers = {
       });
     }
 
-    return resolveStorageInfo(data.workspaceUri);
+    return resolveStorageInfo(data.workspaceUri, effectiveLang);
   },
 
   updateLockState(data = {}) {
@@ -439,8 +553,12 @@ export const handlers = {
       });
     }
 
-    const info = resolveStorageInfo(data.workspaceUri);
-    const { safeName, fullPath } = resolveContainedFile(info.activeDir, data.noteName);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
+    const { safeName, fullPath } = resolveContainedFile(
+      info.activeDir,
+      data.noteName,
+      info.effectiveLang
+    );
     let fileUri = '';
     try {
       fileUri = pathToFileURL(fullPath).href;
@@ -468,14 +586,14 @@ export const handlers = {
   },
 
   poll(data = {}) {
-    const info = resolveStorageInfo(data.workspaceUri);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
     const dirDigest = computeDirDigest(info.activeDir);
     const sel = loadSelectionState();
     let noteMtime = 0;
     let noteExists = false;
     if (data.name) {
       try {
-        const { fullPath } = resolveContainedFile(info.activeDir, data.name);
+        const { fullPath } = resolveContainedFile(info.activeDir, data.name, info.effectiveLang);
         if (existsSync(fullPath)) {
           noteExists = true;
           noteMtime = statSync(fullPath).mtimeMs;
@@ -491,6 +609,8 @@ export const handlers = {
       agentRead: info.agentRead,
       agentWrite: info.agentWrite,
       quoteMode: info.quoteMode,
+      lang: info.lang,
+      effectiveLang: info.effectiveLang,
       selection: {
         active: Boolean(sel.active),
         consumed: Boolean(sel.consumed),
@@ -503,8 +623,13 @@ export const handlers = {
   },
 
   listNotes(data = {}) {
-    const info = resolveStorageInfo(data.workspaceUri);
-    const notes = listNotesInDir(info.activeDir);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
+    // Persist detected clientLocale on first visit if settings.json does not have effectiveLang yet
+    const rawSettings = loadRawSettingsObj();
+    if (!rawSettings.effectiveLang && (data.clientLocale === 'zh-CN' || data.clientLocale === 'en')) {
+      saveSettings({ clientLocale: data.clientLocale });
+    }
+    const notes = listNotesInDir(info.activeDir, info.effectiveLang);
     return {
       ...info,
       dirDigest: computeDirDigest(info.activeDir),
@@ -514,14 +639,19 @@ export const handlers = {
   },
 
   readNote(data = {}) {
-    const info = resolveStorageInfo(data.workspaceUri);
-    const { safeName, fullPath } = resolveContainedFile(info.activeDir, data.name);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
+    const m = getMsg(info.effectiveLang);
+    const { safeName, fullPath } = resolveContainedFile(
+      info.activeDir,
+      data.name,
+      info.effectiveLang
+    );
     if (!existsSync(fullPath)) {
-      throw new Error(`找不到笔记：${safeName}`);
+      throw new Error(m.noteNotFound(safeName));
     }
     const st = statSync(fullPath);
     if (st.size > MAX_NOTE_BYTES) {
-      throw new Error('该笔记文件超过 5MB，暂不支持在侧边栏直接打开');
+      throw new Error(m.noteTooLargeOpen);
     }
     const content = readFileSync(fullPath, 'utf8');
     return {
@@ -535,18 +665,21 @@ export const handlers = {
   },
 
   createNote(data = {}) {
-    const info = resolveStorageInfo(data.workspaceUri);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
     ensureDir(info.activeDir);
-    const desired = sanitizeNoteFilename(data.name || defaultNoteName());
+    const desired = sanitizeNoteFilename(
+      data.name || defaultNoteName(info.effectiveLang),
+      info.effectiveLang
+    );
     let finalName = desired;
-    let { fullPath } = resolveContainedFile(info.activeDir, desired);
+    let { fullPath } = resolveContainedFile(info.activeDir, desired, info.effectiveLang);
 
     if (existsSync(fullPath)) {
       const stem = desired.slice(0, -3);
       let idx = 2;
       while (idx < 1000) {
         const candidate = `${stem} (${idx}).md`;
-        const check = resolveContainedFile(info.activeDir, candidate);
+        const check = resolveContainedFile(info.activeDir, candidate, info.effectiveLang);
         if (!existsSync(check.fullPath)) {
           finalName = check.safeName;
           fullPath = check.fullPath;
@@ -573,12 +706,17 @@ export const handlers = {
   },
 
   saveNote(data = {}) {
-    const info = resolveStorageInfo(data.workspaceUri);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
+    const m = getMsg(info.effectiveLang);
     ensureDir(info.activeDir);
-    const { safeName, fullPath } = resolveContainedFile(info.activeDir, data.name);
+    const { safeName, fullPath } = resolveContainedFile(
+      info.activeDir,
+      data.name,
+      info.effectiveLang
+    );
     const content = typeof data.content === 'string' ? data.content : '';
     if (Buffer.byteLength(content, 'utf8') > MAX_NOTE_BYTES) {
-      throw new Error('笔记内容超过 5MB 限制');
+      throw new Error(m.noteTooLargeSave);
     }
     writeFileSync(fullPath, content, 'utf8');
     writeBusyLock(false, safeName);
@@ -589,18 +727,19 @@ export const handlers = {
       title: safeName.replace(/\.md$/i, ''),
       updatedAt: st.mtimeMs,
       size: st.size,
-      preview: extractPreview(content),
+      preview: extractPreview(content, info.effectiveLang),
       dirDigest: computeDirDigest(info.activeDir),
       activeDir: info.activeDir,
     };
   },
 
   renameNote(data = {}) {
-    const info = resolveStorageInfo(data.workspaceUri);
-    const src = resolveContainedFile(info.activeDir, data.oldName);
-    const dst = resolveContainedFile(info.activeDir, data.newName);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
+    const m = getMsg(info.effectiveLang);
+    const src = resolveContainedFile(info.activeDir, data.oldName, info.effectiveLang);
+    const dst = resolveContainedFile(info.activeDir, data.newName, info.effectiveLang);
     if (!existsSync(src.fullPath)) {
-      throw new Error(`找不到原笔记：${src.safeName}`);
+      throw new Error(m.oldNoteNotFound(src.safeName));
     }
     if (src.safeName.toLowerCase() === dst.safeName.toLowerCase()) {
       if (src.safeName !== dst.safeName) {
@@ -615,7 +754,7 @@ export const handlers = {
       };
     }
     if (existsSync(dst.fullPath)) {
-      throw new Error(`已存在同名笔记：${dst.safeName}`);
+      throw new Error(m.duplicateNote(dst.safeName));
     }
     renameSync(src.fullPath, dst.fullPath);
     const st = statSync(dst.fullPath);
@@ -628,8 +767,12 @@ export const handlers = {
   },
 
   deleteNote(data = {}) {
-    const info = resolveStorageInfo(data.workspaceUri);
-    const { safeName, fullPath } = resolveContainedFile(info.activeDir, data.name);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
+    const { safeName, fullPath } = resolveContainedFile(
+      info.activeDir,
+      data.name,
+      info.effectiveLang
+    );
     if (existsSync(fullPath)) {
       unlinkSync(fullPath);
     }
@@ -641,6 +784,7 @@ export const handlers = {
   },
 
   browse(data = {}) {
-    return browseDirectories(data.path);
+    const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
+    return browseDirectories(data.path, info.effectiveLang);
   },
 };
