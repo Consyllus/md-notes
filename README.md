@@ -2,7 +2,7 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-A minimalist local Markdown notebook running inside the Google Antigravity Auxiliary Pane. Built-in bilingual UI (**English** & **简体中文**, auto-detected from your system or switchable anytime in Settings).
+A minimalist local Markdown notebook running inside the Google Antigravity Auxiliary Pane.
 
 ## Quick Install
 
