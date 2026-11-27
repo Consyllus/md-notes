@@ -9,7 +9,7 @@
 
   const I18N = {
     'zh-CN': {
-      appTitle: 'Markdown 笔记本',
+      appTitle: '笔记本',
       untitledNote: '未命名笔记',
       notebookTitleFallback: '笔记本',
       drawerTitleAttr: '笔记列表',
@@ -58,7 +58,7 @@
       phList: '列表项…',
       phTodo: '待办事项…',
       phCode: '输入代码…',
-      phFirstLine: '输入 ## + 空格 建标题，输入 @@ 呼出上下文框选…',
+      phFirstLine: '随手记录内容，输入 @@ 可框选片段发给 AI…',
       codeLeaveHint: 'Ctrl+Enter 离开代码块',
       lockBadgeTitle: '点击修改权限与 @@ 模式设置',
       quoteBadgeTitle: '当前 @@ 框选模式（点击切换）',
@@ -133,9 +133,9 @@
       toastSaved: '已保存',
     },
     en: {
-      appTitle: 'Markdown Notes',
+      appTitle: 'Notebook',
       untitledNote: 'Untitled Note',
-      notebookTitleFallback: 'Notes',
+      notebookTitleFallback: 'Notebook',
       drawerTitleAttr: 'Notes list',
       renameNoteTitleAttr: 'Click to rename current note',
       renameNoteAria: 'Rename note',
@@ -183,7 +183,7 @@
       phList: 'List item…',
       phTodo: 'To-do…',
       phCode: 'Enter code…',
-      phFirstLine: 'Type ## + Space for heading, or @@ to select context…',
+      phFirstLine: 'Start typing to take notes, or type @@ to share context with AI…',
       codeLeaveHint: 'Ctrl+Enter to leave code block',
       lockBadgeTitle: 'Click to configure permissions & @@ mode',
       quoteBadgeTitle: 'Current @@ selection mode (click to change)',

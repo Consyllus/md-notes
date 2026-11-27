@@ -2,16 +2,16 @@
   "command": "node",
   "args": ["main.mjs"],
   "restart_policy": "always",
-  "display_name": "Markdown Notes",
-  "description": "Minimalist right-pane Markdown notebook with live block preview, @@ context selection, and Agent access locks.",
+  "display_name": "Notebook",
+  "description": "Minimalist right-pane notebook with live Markdown preview, @@ context selection, and Agent access locks.",
   "has_web_ui": true,
   "ui_config": {
-    "display_name": "Markdown Notes",
+    "display_name": "Notebook",
     "views": [
       {
         "path": "/",
         "entrypoint": "SIDECAR_UI_ENTRYPOINT_AUX_PANE",
-        "title": "Notes"
+        "title": "Notebook"
       }
     ]
   }

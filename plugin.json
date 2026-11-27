@@ -1,18 +1,18 @@
 {
   "name": "md-notes",
-  "displayName": "Markdown Notes",
+  "displayName": "Notebook",
   "version": "1.0.0",
-  "description": "Minimalist Aux Pane Markdown notebook with live block preview, nested lists, @@ context selection, and Agent access locks. (极简右侧 Markdown 笔记本)",
+  "description": "Minimalist side-pane (sidebar) notebook and scratchpad plugin for Google Antigravity — plain-text & live Markdown editing, nested lists, @@ context selection, and Agent access locks. (极简右侧笔记本 / 记笔记便签侧边栏)",
   "author": {
     "name": "FalsenJing",
     "url": "https://consyllus.com"
   },
   "homepage": "https://consyllus.com",
-  "repository": "https://github.com/Consyllus/md-notes",
+  "repository": "https://github.com/Consyllus/notebook-antigravity-plugin",
   "logo": "assets/logo.svg",
   "suggestedPrompts": [
-    "Open the Markdown Notes side pane",
+    "Open the Notebook side pane",
     "Save the key takeaways from this chat into today's note",
-    "Create a new study note in Markdown Notes"
+    "Create a new study note in Notebook"
   ]
 }

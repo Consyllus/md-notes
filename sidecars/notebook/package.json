@@ -1,14 +1,25 @@
 {
-  "name": "@consyllus/md-notes-notebook",
+  "name": "@consyllus/notebook-antigravity-plugin",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "Minimalist Markdown notebook sidecar for Antigravity",
+  "description": "Minimalist Markdown notebook & scratchpad sidecar plugin for Google Antigravity",
+  "keywords": [
+    "antigravity",
+    "google-antigravity",
+    "antigravity-plugin",
+    "agy",
+    "sidecar",
+    "markdown",
+    "notes",
+    "notebook",
+    "scratchpad"
+  ],
   "author": "FalsenJing (https://consyllus.com)",
   "homepage": "https://consyllus.com",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Consyllus/md-notes.git"
+    "url": "https://github.com/Consyllus/notebook-antigravity-plugin.git"
   },
   "license": "MIT"
 }
