@@ -2,7 +2,7 @@
 
 [English](./README.md) | 简体中文
 
-一个运行在 Google Antigravity 右侧辅助面板（Aux Pane）中的极简本地 Markdown 笔记本插件。原生内置 **简体中文 / English** 双语界面（首次启动自动跟随系统语言，也可在设置面板随时一键实时切换）。
+一个运行在 Google Antigravity 右侧辅助面板（Aux Pane）中的极简本地 Markdown 笔记本插件。
 
 ## 快速安装
 
