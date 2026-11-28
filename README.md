@@ -7,7 +7,11 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-A minimalist local notebook plugin running in the right-hand side pane of **Google Antigravity** (Antigravity 2.0, IDE, and CLI / `agy`).
+A minimalist, **directly editable** local notebook plugin running in the right-hand side pane of **Google Antigravity** (Antigravity 2.0, IDE, and CLI / `agy`) — built for **live human-AI co-editing**, **`@@` cross-conversation persistent context reference**, and **native adaptation to the host's Light, Dark, and corresponding sub-themes**.
+
+<p align="center">
+  <img src="./assets/hero.png" alt="Notebook in Google Antigravity" width="100%" />
+</p>
 
 ## Quick Install
 
@@ -23,20 +27,40 @@ agy plugin install https://github.com/Consyllus/notebook-antigravity-plugin
 
 ## Key Features
 
-- **Live Block Editing & Markdown Formatting (`Ctrl+E`)**: Supports direct plain-text editing and toolbar formatting, as well as live Markdown block preview (`H1`–`H4` headings, **multi-level bullet, numbered, and task lists** with `• / ◦ / ▪` markers & auto-renumbering, code blocks, tables, and blockquotes) and instant raw source toggling.
+- **Directly Editable Live Blocks & Bi-Directional Co-Editing (`Ctrl+E`)**: Unlike read-only previewers, every rendered block is **directly editable in place** — click any paragraph, heading (`H1`–`H4`), **multi-level bullet / numbered / task list** (`• / ◦ / ▪` with auto-renumbering), table, code block, or quote to edit immediately, toggle full Markdown source (`Ctrl+E`), or co-edit the same local `.md` files with the Agent in real time (with instant hot-sync and `conversation://` / `file://` jump links).
+
+  <p align="center">
+    <img src="./assets/feature-1-en.webp" alt="Live Markdown Block Preview, Nested Lists & Function Reference Table" width="100%" />
+  </p>
+
 - **LaTeX Math Rendering & `0ms` Syntax Autocomplete**:
   - **Full Offline KaTeX Engine**: Supports inline `$...$` and centered display `$$...$$` math blocks (with live formula preview while editing source), bundled with `mhchem` chemical equations (`\ce{...}`), `physics`-style calculus/vector macros, cross-block `\gdef` custom macros, and `copy-tex` LaTeX source copying.
   - **Instant `\command` Autocomplete & Brace Tab-Jump**: Typing `\` inside any formula pops up a `0ms` completion menu across **950+ official KaTeX commands and environments** with live rendered symbol previews; press `Tab` / `Enter` to insert and land inside `{}` braces, and press `Tab` to jump across arguments (plus `￥￥` → `$|$` auto-conversion for Chinese IME).
-- **`@@` Context Selection Box (Two Mutually Exclusive Modes)**: Type `@@` in any line to spawn an upward-draggable selection frame and control exactly what the Agent sees:
-  - **Mode A · Single-Turn Line Reference (Default)**: Sends only the file URI and line range for a single chat turn; the blue frame automatically turns gray once consumed.
-  - **Mode B · Persistent Snippet Injection**: Injects only the selected plain text (zero file path or outside content exposure), staying active across turns with per-conversation SHA-1 deduplication to save tokens.
+
+  <p align="center">
+    <img src="./assets/feature-2-en.webp" alt="Live Math Block Preview & 0ms LaTeX Command Autocomplete" width="100%" />
+  </p>
+
+- **Cross-Conversation Persistent Reference (`@@` Context Selection Box)**: Type `@@` on any line to spawn an upward-draggable selection frame and control exactly what the Agent sees across turns and conversations:
+  - **Mode B · Cross-Conversation Persistent Snippet**: Pins the selected text across **both multi-turn chats and newly opened conversations** without re-selecting (injecting only the selected snippet with zero outside file or path exposure, backed by per-conversation `SHA-1` hash deduplication so zero duplicate tokens are wasted, and auto-refreshing if you edit the pinned text).
+  - **Mode A · Single-Turn Line Reference (Default)**: Sends only the file URI and line range (`#L start-end`) for a single chat turn; the blue frame automatically turns gray once consumed.
+
+  <p align="center">
+    <img src="./assets/feature-3-en.webp" alt="@@ Draggable Context Selection" width="100%" />
+  </p>
+
 - **Agent Access Locks (`PreToolUse` Engine Guard)**:
   - Independent toggles for **Allow Agent to Read Notes** and **Allow Agent to Edit Notes**.
   - **Dynamic Focus Busy-Lock**: Automatically pauses Agent writes while your cursor is focused inside the notebook with unsaved edits, resuming as soon as you save or move focus away.
 - **Multi-Note Management & Flexible Storage**:
   - Create, search, switch, inline-rename, and delete notes with automatic local saving.
   - Follows `<workspace>/notes` by default, or points to any fixed local folder via the built-in directory browser.
-- **Host-Synced Theme Colors & Bilingual UI**: Automatically syncs background surfaces, text, borders, accent colors, and math formula rendering with the Antigravity host's Light / Dark theme in real time, with built-in English and Simplified Chinese switching.
+
+  <p align="center">
+    <img src="./assets/feature-4-en.webp" alt="Multi-Note Slide-Over Drawer & PreToolUse Access Locks" width="100%" />
+  </p>
+
+- **Host Light / Dark Theme & Sub-Theme Adaptation + Bilingual UI**: Dynamically inherits Antigravity's semantic design tokens (`--background`, `--card`, `--foreground`, `--primary`, `--border`), seamlessly adapting surfaces, cards, borders, scrollbars, active highlights, and KaTeX math rendering in real time to the host's **Light theme, Dark theme, and all of their corresponding sub-themes** — alongside instant English and Simplified Chinese UI switching.
 
 ## Keyboard Shortcuts
 
