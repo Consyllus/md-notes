@@ -55,7 +55,7 @@
       phTodo: '待办事项…',
       phCode: '输入代码…',
       phMath: '输入 LaTeX 数学公式（支持 aligned、matrix、\\ce{...} 等）…',
-      phFirstLine: '随手记录内容，输入 @@ 可框选片段发给 AI…',
+      phFirstLine: '随手记录内容，输入 @@ 框选片段发给 AI，输入 || 插入当前对话链接…',
       codeLeaveHint: 'Ctrl+Enter 离开代码块',
       mathLeaveHint: 'Ctrl+Enter 离开公式块',
       mathPreviewEmpty: '输入 LaTeX 后在此实时预览公式',
@@ -132,6 +132,9 @@
       toastSaved: '已保存',
       convLinkTitle: (shortId) => `点击切换至宿主对话 (${shortId}…)`,
       fileLinkTitle: '点击打开关联文件',
+      defaultConvLabel: (shortId) => `对话 ${shortId}`,
+      toastInsertedConvLink: '已插入当前对话跳转链接',
+      toastNoHostConv: '未检测到当前宿主对话窗口',
       toastHostConvUnsupported: '当前环境不支持直接跳转宿主对话窗口',
       toastHostFileUnsupported: '当前环境不支持直接打开本地文件视图',
     },
@@ -182,7 +185,7 @@
       phTodo: 'To-do…',
       phCode: 'Enter code…',
       phMath: 'Enter LaTeX math formula (aligned, matrix, \\ce{...}, etc.)…',
-      phFirstLine: 'Start typing to take notes, or type @@ to share context with AI…',
+      phFirstLine: 'Start typing to take notes — type @@ to share context, or || to link current chat…',
       codeLeaveHint: 'Ctrl+Enter to leave code block',
       mathLeaveHint: 'Ctrl+Enter to leave math block',
       mathPreviewEmpty: 'Live LaTeX preview appears here',
@@ -262,6 +265,9 @@
       toastSaved: 'Saved',
       convLinkTitle: (shortId) => `Switch to conversation (${shortId}…)`,
       fileLinkTitle: 'Open linked file',
+      defaultConvLabel: (shortId) => `Chat ${shortId}`,
+      toastInsertedConvLink: 'Inserted current chat jump link',
+      toastNoHostConv: 'No active host conversation detected',
       toastHostConvUnsupported: 'Conversation jump requires the Antigravity host app',
       toastHostFileUnsupported: 'File preview requires the Antigravity host app',
     },
@@ -346,8 +352,25 @@
     ...props,
   });
 
+  function detectInitialHostConvId() {
+    try {
+      const fromSidecar = String(window.sidecar?.conversationId || '').trim();
+      if (fromSidecar) return fromSidecar;
+      const params = new URLSearchParams(window.location.search);
+      return String(params.get('conversationId') || '').trim();
+    } catch {
+      return '';
+    }
+  }
+
+  const initialHostConvId = detectInitialHostConvId();
+
   const state = {
     workspaceUri: '',
+    hostConvId: initialHostConvId,
+    hostConv: initialHostConvId
+      ? { conversationId: initialHostConvId, title: '', hasRealTitle: false }
+      : null,
     langPref: 'auto',
     pendingLangPref: 'auto',
     browserLocale: detectBrowserLocale(),
@@ -458,6 +481,13 @@
     if (state.workspaceUri) {
       url.searchParams.set('workspaceUri', state.workspaceUri);
     }
+    if (
+      state.hostConvId &&
+      params.hostConvId === undefined &&
+      params.conversationId === undefined
+    ) {
+      url.searchParams.set('hostConvId', state.hostConvId);
+    }
     url.searchParams.set('clientLocale', getEffectiveLang());
     for (const [k, v] of Object.entries(params)) {
       if (v !== undefined && v !== null) {
@@ -495,6 +525,32 @@
     state.toastTimer = setTimeout(() => {
       el.toast.classList.add('hidden');
     }, 2000);
+  }
+
+  function ingestHostConvInfo(info) {
+    if (!info || typeof info !== 'object') return;
+    const cid = String(info.conversationId || '').trim();
+    if (!cid) return;
+    const title = String(info.title || '').trim();
+    state.hostConv = {
+      conversationId: cid,
+      title: title || t('defaultConvLabel', cid.slice(0, 8)),
+      hasRealTitle: Boolean(info.hasRealTitle && title),
+    };
+  }
+
+  async function refreshHostConversation(forceRefresh = false) {
+    try {
+      const info = await apiGet('/api/config', {
+        hostConversation: '1',
+        conversationId: state.hostConvId || undefined,
+        forceRefresh: forceRefresh ? '1' : undefined,
+      });
+      ingestHostConvInfo(info);
+      return state.hostConv;
+    } catch {
+      return state.hostConv;
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -737,6 +793,7 @@
     state.pollInFlight = true;
     try {
       const snap = await apiGet('/api/poll', { name: state.currentName || '' });
+      ingestHostConvInfo(snap.hostConv);
       if (state.storage) {
         state.storage.agentRead = snap.agentRead;
         state.storage.agentWrite = snap.agentWrite;
@@ -2237,6 +2294,231 @@
     if (state.selBox.active) renderSelectionOverlay();
   }
 
+  let applyingPipeTrigger = false;
+
+  function isCaretBlockedForPipeTrigger(ta, triggerStart, block = null) {
+    if (
+      block &&
+      (block.type === 'code' || block.type === 'math' || block.type === 'table' || block.type === 'hr')
+    ) {
+      return true;
+    }
+    const val = ta.value;
+    if (!block) {
+      const beforeAll = val.slice(0, triggerStart);
+      const fenceLines = (beforeAll.match(/^\s*```/gm) || []).length;
+      if (fenceLines % 2 === 1) return true;
+    }
+
+    const lineStart = triggerStart > 0 ? val.lastIndexOf('\n', triggerStart - 1) + 1 : 0;
+    const lineBefore = val.slice(lineStart, triggerStart);
+
+    // Do not hijack Markdown table cells (lines starting with `|`)
+    if (/^\s*\|/.test(lineBefore)) return true;
+
+    // Do not hijack inline code spans (`a || b`)
+    let unescapedTicks = 0;
+    for (let k = 0; k < lineBefore.length; k++) {
+      if (lineBefore[k] === '\\') {
+        k++;
+        continue;
+      }
+      if (lineBefore[k] === '`') unescapedTicks++;
+    }
+    if (unescapedTicks % 2 === 1) return true;
+
+    // Do not hijack LaTeX math norms ($||x||$)
+    if (getMathCaretContext(ta, block).inMath) return true;
+
+    return false;
+  }
+
+  function replaceRangeInTextarea(ta, start, end, insertText) {
+    const before = ta.value.slice(0, start);
+    const after = ta.value.slice(end);
+    const expected = before + insertText + after;
+    const nextCaret = start + insertText.length;
+
+    applyingPipeTrigger = true;
+    try {
+      let applied = false;
+      if (document.activeElement === ta && typeof document.execCommand === 'function') {
+        ta.setSelectionRange(start, end);
+        try {
+          applied = document.execCommand('insertText', false, insertText);
+        } catch {
+          applied = false;
+        }
+      }
+      if (!applied || ta.value !== expected) {
+        ta.value = expected;
+      }
+      ta.setSelectionRange(nextCaret, nextCaret);
+    } finally {
+      applyingPipeTrigger = false;
+    }
+  }
+
+  function upgradePlaceholderConvLink(targetBlock, targetIdx, oldLinkMd, newLinkMd) {
+    if (!oldLinkMd || !newLinkMd || oldLinkMd === newLinkMd) return;
+    const delta = newLinkMd.length - oldLinkMd.length;
+
+    if (targetBlock) {
+      if (!state.blocks.includes(targetBlock)) return;
+      const pos = targetBlock.text.indexOf(oldLinkMd);
+      if (pos === -1) return;
+      targetBlock.text =
+        targetBlock.text.slice(0, pos) + newLinkMd + targetBlock.text.slice(pos + oldLinkMd.length);
+
+      const curIdx = state.blocks.indexOf(targetBlock);
+      if (!state.sourceMode && curIdx !== -1) {
+        if (state.activeBlockIndex === curIdx) {
+          const row = el.blocksRoot.children[curIdx];
+          const activeTa = row?.querySelector('.block-input');
+          if (activeTa) {
+            const s = activeTa.selectionStart;
+            const e = activeTa.selectionEnd;
+            applyingPipeTrigger = true;
+            try {
+              activeTa.value = targetBlock.text;
+              const adj = (p) => (p >= pos + oldLinkMd.length ? p + delta : p);
+              activeTa.setSelectionRange(adj(s), adj(e));
+            } finally {
+              applyingPipeTrigger = false;
+            }
+            autoResizeTextarea(activeTa);
+          }
+        } else {
+          replaceSingleBlockNode(curIdx);
+        }
+      }
+      if (state.selBox.active) renderSelectionOverlay();
+      scheduleSave();
+      return;
+    }
+
+    if (state.sourceMode && el.sourceEditor) {
+      const curVal = el.sourceEditor.value;
+      const pos = curVal.indexOf(oldLinkMd);
+      if (pos === -1) return;
+      const s = el.sourceEditor.selectionStart;
+      const e = el.sourceEditor.selectionEnd;
+      applyingPipeTrigger = true;
+      try {
+        el.sourceEditor.value =
+          curVal.slice(0, pos) + newLinkMd + curVal.slice(pos + oldLinkMd.length);
+        const adj = (p) => (p >= pos + oldLinkMd.length ? p + delta : p);
+        el.sourceEditor.setSelectionRange(adj(s), adj(e));
+      } finally {
+        applyingPipeTrigger = false;
+      }
+      scheduleSave();
+    }
+  }
+
+  // `||` (or full-width `｜｜` in Chinese IME) shortcut:
+  // Instantly inserts `[Current Chat Title](conversation://<conversationId>)` at the caret.
+  function tryExtractPipePipeTrigger(block, ta, idx = -1, inputEvent = null) {
+    if (applyingPipeTrigger || !ta || ta.selectionStart !== ta.selectionEnd) return false;
+    const inputType = String(inputEvent?.inputType || '');
+    if (
+      inputType === 'insertFromPaste' ||
+      inputType === 'insertFromDrop' ||
+      inputType === 'historyUndo' ||
+      inputType === 'historyRedo' ||
+      inputType.startsWith('delete')
+    ) {
+      return false;
+    }
+
+    const val = ta.value;
+    const caret = ta.selectionStart;
+    if (caret < 2) return false;
+
+    const pair = val.slice(caret - 2, caret);
+    if (pair !== '||' && pair !== '｜｜') return false;
+
+    const prevCh = caret >= 3 ? val[caret - 3] : '';
+    const nextCh = caret < val.length ? val[caret] : '';
+    if (prevCh === '\\' || prevCh === '|' || prevCh === '｜') return false;
+    if (nextCh === '|' || nextCh === '｜') return false;
+
+    const triggerStart = caret - 2;
+    if (isCaretBlockedForPipeTrigger(ta, triggerStart, block)) {
+      return false;
+    }
+
+    const knownConvId = String(state.hostConv?.conversationId || state.hostConvId || '').trim();
+    if (knownConvId) {
+      const hasSameCached = state.hostConv?.conversationId === knownConvId;
+      const initialTitle =
+        hasSameCached && state.hostConv.title
+          ? state.hostConv.title
+          : t('defaultConvLabel', knownConvId.slice(0, 8));
+      const initialMd = `[${initialTitle}](conversation://${knownConvId})`;
+
+      replaceRangeInTextarea(ta, triggerStart, caret, initialMd);
+      if (block) {
+        block.text = ta.value;
+        autoResizeTextarea(ta);
+        if (state.selBox.active) renderSelectionOverlay();
+      }
+      scheduleSave();
+      showToast(t('toastInsertedConvLink'));
+
+      if (!hasSameCached || !state.hostConv?.hasRealTitle) {
+        void refreshHostConversation(true).then((fresh) => {
+          if (fresh?.conversationId === knownConvId && fresh.hasRealTitle && fresh.title) {
+            const nextMd = `[${fresh.title}](conversation://${knownConvId})`;
+            upgradePlaceholderConvLink(block, idx, initialMd, nextMd);
+          }
+        });
+      }
+      return true;
+    }
+
+    // Fallback when opened outside an Aux Pane with `?conversationId=` (e.g. cold global start)
+    replaceRangeInTextarea(ta, triggerStart, caret, '');
+    if (block) {
+      block.text = ta.value;
+      autoResizeTextarea(ta);
+    }
+    void refreshHostConversation(true).then((fresh) => {
+      if (!fresh?.conversationId) {
+        showToast(t('toastNoHostConv'));
+        return;
+      }
+      const label = fresh.title || t('defaultConvLabel', fresh.conversationId.slice(0, 8));
+      const linkMd = `[${label}](conversation://${fresh.conversationId})`;
+      if (block) {
+        if (!state.blocks.includes(block)) return;
+        const curIdx = state.blocks.indexOf(block);
+        const row = !state.sourceMode ? el.blocksRoot.children[curIdx] : null;
+        const activeTa = row?.querySelector('.block-input');
+        if (activeTa) {
+          const insertPos = Math.min(activeTa.value.length, Math.max(triggerStart, activeTa.selectionStart));
+          replaceRangeInTextarea(activeTa, insertPos, insertPos, linkMd);
+          block.text = activeTa.value;
+          autoResizeTextarea(activeTa);
+        } else {
+          const insertPos = Math.min(block.text.length, triggerStart);
+          block.text = block.text.slice(0, insertPos) + linkMd + block.text.slice(insertPos);
+          if (!state.sourceMode && curIdx !== -1) replaceSingleBlockNode(curIdx);
+        }
+        if (state.selBox.active) renderSelectionOverlay();
+      } else if (state.sourceMode && el.sourceEditor) {
+        const insertPos = Math.min(
+          el.sourceEditor.value.length,
+          Math.max(triggerStart, el.sourceEditor.selectionStart)
+        );
+        replaceRangeInTextarea(el.sourceEditor, insertPos, insertPos, linkMd);
+      }
+      scheduleSave();
+      showToast(t('toastInsertedConvLink'));
+    });
+    return true;
+  }
+
   function tryExtractAtAtTrigger(block, ta, idx) {
     if (block.type === 'code' || block.type === 'math') return false;
     const val = ta.value;
@@ -2569,6 +2851,10 @@
             block.singleLine = false;
           }
           if (tryExtractAtAtTrigger(block, ta, idx)) return;
+          if (tryExtractPipePipeTrigger(block, ta, idx, null)) {
+            row.classList.toggle('is-empty', block.type === 'p' && !block.text);
+            return;
+          }
           const newCaret = tryLiveTransform(block, ta);
           if (newCaret !== null) {
             syncActiveBlockInPlace(row, block, idx, ta, newCaret);
@@ -2589,6 +2875,7 @@
       });
 
       ta.addEventListener('input', (e) => {
+        if (applyingPipeTrigger) return;
         block.text = ta.value;
         if (!composing && !e.isComposing) {
           tryNormalizeChineseMathInput(ta, block);
@@ -2602,6 +2889,11 @@
         if (!composing && !e.isComposing) {
           if (tryExtractAtAtTrigger(block, ta, idx)) {
             closeLatexAc();
+            return;
+          }
+          if (tryExtractPipePipeTrigger(block, ta, idx, e)) {
+            closeLatexAc();
+            row.classList.toggle('is-empty', block.type === 'p' && !block.text);
             return;
           }
           const newCaret = tryLiveTransform(block, ta);
@@ -3246,6 +3538,7 @@
     try {
       const data = await apiGet('/api/notes');
       state.storage = data;
+      ingestHostConvInfo(data.hostConv);
       const prevEffective = getEffectiveLang();
       if (data.lang) {
         state.langPref = data.lang;
@@ -3900,6 +4193,10 @@
 
   el.sourceEditor.addEventListener('compositionend', () => {
     requestAnimationFrame(() => {
+      if (tryExtractPipePipeTrigger(null, el.sourceEditor, -1, null)) {
+        closeLatexAc();
+        return;
+      }
       if (tryNormalizeChineseMathInput(el.sourceEditor, null)) {
         scheduleSave();
       }
@@ -3907,7 +4204,12 @@
     });
   });
   el.sourceEditor.addEventListener('input', (e) => {
+    if (applyingPipeTrigger) return;
     if (!e.isComposing) {
+      if (tryExtractPipePipeTrigger(null, el.sourceEditor, -1, e)) {
+        closeLatexAc();
+        return;
+      }
       tryNormalizeChineseMathInput(el.sourceEditor, null);
     }
     scheduleSave();
@@ -4084,6 +4386,25 @@
     void ensureKatexLoaded().then((loaded) => {
       if (loaded && !state.sourceMode && state.currentName) {
         renderLiveBlocks();
+      }
+    });
+
+    void refreshHostConversation(false);
+
+    window.addEventListener('message', (event) => {
+      const nextConvId = event.data?.payload?.conversationId;
+      if (
+        typeof nextConvId === 'string' &&
+        nextConvId.trim() &&
+        nextConvId.trim() !== state.hostConvId
+      ) {
+        state.hostConvId = nextConvId.trim();
+        state.hostConv = {
+          conversationId: state.hostConvId,
+          title: t('defaultConvLabel', state.hostConvId.slice(0, 8)),
+          hasRealTitle: false,
+        };
+        void refreshHostConversation(true);
       }
     });
 

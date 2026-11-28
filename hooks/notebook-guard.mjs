@@ -211,6 +211,40 @@ function saveSelectionFile(stateDir, nextSel) {
   }
 }
 
+function recordActiveHostConversation(stateDir, payload) {
+  const convId = String(payload?.conversationId || '').trim();
+  if (!convId || convId === 'default') return;
+  try {
+    const filePath = join(stateDir, 'host-context.json');
+    const prev = readJsonIfExists(filePath);
+    const now = Date.now();
+    if (
+      prev &&
+      prev.conversationId === convId &&
+      typeof prev.updatedAt === 'number' &&
+      now - prev.updatedAt < 15000
+    ) {
+      return;
+    }
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(
+      filePath,
+      JSON.stringify(
+        {
+          conversationId: convId,
+          workspacePaths: Array.isArray(payload?.workspacePaths) ? payload.workspacePaths : [],
+          updatedAt: now,
+        },
+        null,
+        2
+      ),
+      'utf8'
+    );
+  } catch {
+    // ignore write failure in hook
+  }
+}
+
 function sanitizeSubdir(sub) {
   const cleaned = String(sub || '')
     .trim()
@@ -458,6 +492,7 @@ export function evaluatePreInvocation(payload) {
   }
 
   const { stateDir, effectiveLang, settings, selection } = loadAllState(payload);
+  recordActiveHostConversation(stateDir, payload);
   if (!selection) return {};
 
   const msg = HOOK_MSG[effectiveLang === 'zh-CN' ? 'zh-CN' : 'en'];

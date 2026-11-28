@@ -86,6 +86,7 @@ if (isMainModule()) {
 
   app.api('/api/config', async (data) => (await getLatestHandlers()).getConfig(data), 'GET');
   app.api('/api/config', async (data) => (await getLatestHandlers()).updateConfig(data), 'POST');
+  app.api('/api/host-conversation', async (data) => (await getLatestHandlers()).resolveHostConversation(data), 'GET');
   app.api('/api/lock-state', async (data) => (await getLatestHandlers()).updateLockState(data), 'POST');
   app.api('/api/selection', async () => (await getLatestHandlers()).getSelection(), 'GET');
   app.api('/api/selection', async (data) => (await getLatestHandlers()).updateSelection(data), 'POST');

@@ -18,4 +18,5 @@ To manage or reload the plugin on the Customizations page, provide:
 ## 2. Read & Update Note Files
 
 - By default, notes are stored as `.md` files in `<workspace>/notes/` (if the user configured a custom folder, inspect `<appDataDir>/sidecar_data/md-notes/notebook/data/settings.json` for `mode: "custom"` and `customDir`).
+- Users can type `@@` in the notebook to pin context snippets, or type `||` to insert a `[<title>](conversation://<conversation-id>)` jump link to the current host chat window.
 - When the user asks to save or append content to a note, read the target `.md` file first to confirm its existing structure, then append clean headings and nested lists (`2` spaces per indent level). If blocked by the notebook's `PreToolUse` write lock, politely ask the user to enable **Allow Agent to Edit Notes**（「允许 Agent 修改笔记」）in Notebook Settings.

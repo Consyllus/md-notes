@@ -41,6 +41,7 @@ const MSG = {
     noteTooLargeSave: '笔记内容超过 5MB 限制',
     oldNoteNotFound: (n) => `找不到原笔记：${n}`,
     duplicateNote: (n) => `已存在同名笔记：${n}`,
+    defaultConvTitle: (shortId) => `对话 ${shortId}`,
   },
   en: {
     emptyFilename: 'Note filename cannot be empty',
@@ -61,6 +62,7 @@ const MSG = {
     noteTooLargeSave: 'Note content exceeds the 5MB limit',
     oldNoteNotFound: (n) => `Original note not found: ${n}`,
     duplicateNote: (n) => `A note with this name already exists: ${n}`,
+    defaultConvTitle: (shortId) => `Chat ${shortId}`,
   },
 };
 
@@ -108,6 +110,168 @@ function getBusyLockFile() {
 
 function getSelectionFile() {
   return join(getSettingsDir(), 'selection-state.json');
+}
+
+function getHostContextFile() {
+  return join(getSettingsDir(), 'host-context.json');
+}
+
+function loadHostContext() {
+  try {
+    const raw = readFileSync(getHostContextFile(), 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object') return parsed;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+const convInfoCache = new Map();
+const CONV_CACHE_REAL_TTL_MS = 5000;
+const CONV_CACHE_FALLBACK_TTL_MS = 1500;
+
+export function sanitizeConvLinkLabel(raw, isSummaryFallback = false) {
+  let s = String(raw || '')
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!s) return '';
+  if (isSummaryFallback) {
+    const stripped = s.replace(/^\/[A-Za-z0-9_-]+\s+/, '').trim();
+    if (stripped) s = stripped;
+  }
+  s = s.replace(/\[/g, '［').replace(/\]/g, '］');
+  s = s.replace(/\\\$/g, '$').replace(/\$/g, '\\$');
+  if ((s.match(/`/g) || []).length % 2 === 1) {
+    s = s.replace(/`/g, "'");
+  }
+  if (s.length > 52) {
+    let cut = s.slice(0, 50).trimEnd();
+    if (cut.endsWith('\\')) cut = cut.slice(0, -1).trimEnd();
+    if ((cut.match(/`/g) || []).length % 2 === 1) {
+      cut = cut.replace(/`/g, "'");
+    }
+    s = `${cut}…`;
+  }
+  return s;
+}
+
+async function callConversationService(method, bodyObj) {
+  const lsAddr = String(process.env.ANTIGRAVITY_LS_ADDRESS || '').trim();
+  const csrf = String(process.env.ANTIGRAVITY_CSRF_TOKEN || '').trim();
+  if (!lsAddr || !csrf || typeof fetch !== 'function') return null;
+
+  const url = /^https?:\/\//i.test(lsAddr)
+    ? `${lsAddr.replace(/\/+$/, '')}/product.v1.ConversationService/${method}`
+    : `http://${lsAddr}/product.v1.ConversationService/${method}`;
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Connect-Protocol-Version': '1',
+        'x-antigravity-csrf-token': csrf,
+        'x-codeium-csrf-token': csrf,
+      },
+      body: JSON.stringify(bodyObj || {}),
+      signal: typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(1500) : undefined,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+function extractTitleFromConversationObj(conv, convId, effectiveLang) {
+  const m = getMsg(effectiveLang);
+  const annTitle = sanitizeConvLinkLabel(conv?.annotations?.title, false);
+  if (annTitle) {
+    return { title: annTitle, hasRealTitle: true };
+  }
+  const sumTitle = sanitizeConvLinkLabel(conv?.state?.summary, true);
+  if (sumTitle) {
+    return { title: sumTitle, hasRealTitle: true };
+  }
+  return {
+    title: m.defaultConvTitle(String(convId || '').slice(0, 8)),
+    hasRealTitle: false,
+  };
+}
+
+async function resolveHostConversationInfo(data = {}) {
+  const settings = loadSettings();
+  const effectiveLang = resolveEffectiveLang(
+    settings.lang,
+    data.clientLocale === 'zh-CN' || data.clientLocale === 'en'
+      ? data.clientLocale
+      : settings.effectiveLang
+  );
+  const forceRefresh = data.forceRefresh === true || data.forceRefresh === '1';
+
+  let convId = String(data.conversationId || data.hostConvId || '').trim();
+  let listedConvObj = null;
+
+  if (!convId) {
+    const hc = loadHostContext();
+    if (hc?.conversationId && typeof hc.conversationId === 'string') {
+      convId = hc.conversationId.trim();
+    }
+  }
+  if (!convId) {
+    convId = String(process.env.ANTIGRAVITY_CONVERSATION_ID || '').trim();
+  }
+  if (!convId) {
+    const listed = await callConversationService('ListConversations', {
+      pageSize: 10,
+      includeArchived: false,
+    });
+    const list = Array.isArray(listed?.conversations) ? listed.conversations : [];
+    if (list.length > 0 && list[0]?.id) {
+      listedConvObj = list[0];
+      convId = String(list[0].id).trim();
+    }
+  }
+
+  if (!convId) {
+    return { ok: false, conversationId: '', title: '', hasRealTitle: false };
+  }
+
+  const cacheKey = `${convId}:${effectiveLang}`;
+  const now = Date.now();
+  if (!forceRefresh && convInfoCache.has(cacheKey)) {
+    const cached = convInfoCache.get(cacheKey);
+    if (cached && now < cached.expiresAt) {
+      return {
+        ok: true,
+        conversationId: convId,
+        title: cached.title,
+        hasRealTitle: cached.hasRealTitle,
+      };
+    }
+  }
+
+  let convObj = listedConvObj;
+  if (!convObj) {
+    const got = await callConversationService('GetConversation', { conversationId: convId });
+    convObj = got?.conversation || got || null;
+  }
+
+  const { title, hasRealTitle } = extractTitleFromConversationObj(convObj, convId, effectiveLang);
+  convInfoCache.set(cacheKey, {
+    title,
+    hasRealTitle,
+    expiresAt: now + (hasRealTitle ? CONV_CACHE_REAL_TTL_MS : CONV_CACHE_FALLBACK_TTL_MS),
+  });
+
+  return {
+    ok: true,
+    conversationId: convId,
+    title,
+    hasRealTitle,
+  };
 }
 
 function loadRawSettingsObj() {
@@ -493,7 +657,14 @@ export const handlers = {
     if (data.katexAsset) {
       return serveHotKatexAsset(data.katexAsset);
     }
+    if (data.hostConversation) {
+      return resolveHostConversationInfo(data);
+    }
     return resolveStorageInfo(data.workspaceUri, data.clientLocale);
+  },
+
+  resolveHostConversation(data = {}) {
+    return resolveHostConversationInfo(data);
   },
 
   updateConfig(data = {}) {
@@ -621,10 +792,15 @@ export const handlers = {
     return saveSelectionState(nextState);
   },
 
-  poll(data = {}) {
+  async poll(data = {}) {
     const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
     const dirDigest = computeDirDigest(info.activeDir);
     const sel = loadSelectionState();
+    const hostConv = await resolveHostConversationInfo({
+      conversationId: data.hostConvId,
+      workspaceUri: data.workspaceUri,
+      clientLocale: info.effectiveLang,
+    });
     let noteMtime = 0;
     let noteExists = false;
     if (data.name) {
@@ -647,6 +823,7 @@ export const handlers = {
       quoteMode: info.quoteMode,
       lang: info.lang,
       effectiveLang: info.effectiveLang,
+      hostConv,
       selection: {
         active: Boolean(sel.active),
         consumed: Boolean(sel.consumed),
@@ -658,18 +835,26 @@ export const handlers = {
     };
   },
 
-  listNotes(data = {}) {
+  async listNotes(data = {}) {
     const info = resolveStorageInfo(data.workspaceUri, data.clientLocale);
     // Persist detected clientLocale on first visit if settings.json does not have effectiveLang yet
     const rawSettings = loadRawSettingsObj();
     if (!rawSettings.effectiveLang && (data.clientLocale === 'zh-CN' || data.clientLocale === 'en')) {
       saveSettings({ clientLocale: data.clientLocale });
     }
-    const notes = listNotesInDir(info.activeDir, info.effectiveLang);
+    const [notes, hostConv] = await Promise.all([
+      Promise.resolve(listNotesInDir(info.activeDir, info.effectiveLang)),
+      resolveHostConversationInfo({
+        conversationId: data.hostConvId,
+        workspaceUri: data.workspaceUri,
+        clientLocale: info.effectiveLang,
+      }),
+    ]);
     return {
       ...info,
       dirDigest: computeDirDigest(info.activeDir),
       selection: loadSelectionState(),
+      hostConv,
       notes,
     };
   },

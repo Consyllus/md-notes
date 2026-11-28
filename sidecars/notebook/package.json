@@ -1,6 +1,6 @@
 {
   "name": "@consyllus/notebook-antigravity-plugin",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "private": true,
   "type": "module",
   "description": "Minimalist Markdown & LaTeX notebook sidecar plugin for Google Antigravity",
